@@ -1,0 +1,704 @@
+import React, { useState, useMemo } from 'react';
+import { Game } from '../types';
+import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
+import {
+  Barcode,
+  Star,
+  Trash2,
+  Eye,
+  Gamepad2,
+  Coins,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Layers,
+  Sparkles,
+  ExternalLink,
+  Pencil,
+  Check,
+  X,
+  RefreshCw,
+  Info,
+} from 'lucide-react';
+import {
+  getGameEstimatedValue,
+  formatCurrency,
+  getPriceChartingSearchUrl,
+  COTE_SOURCE_INFO,
+} from '../utils/marketPriceGuide';
+import { UpdatePricesModal } from './UpdatePricesModal';
+
+interface GameTableViewProps {
+  games: Game[];
+  onSelect: (game: Game) => void;
+  onDelete: (id: string, e: React.MouseEvent) => void;
+  onSelectConsole?: (consoleName: string) => void;
+  isSubSection?: boolean;
+  onUpdateGamePrice?: (gameId: string, newPrice: number) => void;
+  onRecalculateAllPrices?: () => void;
+  onResetGamePrice?: (gameId: string) => void;
+}
+
+type SortField = 'title' | 'console' | 'quantity' | 'releaseYear' | 'value' | 'rating';
+type SortDirection = 'asc' | 'desc';
+
+export const GameTableView: React.FC<GameTableViewProps> = ({
+  games,
+  onSelect,
+  onDelete,
+  onSelectConsole,
+  isSubSection = false,
+  onUpdateGamePrice,
+  onRecalculateAllPrices,
+  onResetGamePrice,
+}) => {
+  const [sortField, setSortField] = useState<SortField>('title');
+  const [sortDir, setSortDir] = useState<SortDirection>('asc');
+  const [editingPriceGameId, setEditingPriceGameId] = useState<string | null>(null);
+  const [tempPrice, setTempPrice] = useState<number>(0);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
+  const [showSourceBanner, setShowSourceBanner] = useState<boolean>(false);
+
+  const handleSavePrice = (gameId: string) => {
+    if (onUpdateGamePrice) {
+      onUpdateGamePrice(gameId, Math.max(0, Math.round(tempPrice)));
+    }
+    setEditingPriceGameId(null);
+  };
+
+  const handleApplyPercentage = (percent: number) => {
+    if (onUpdateGamePrice) {
+      games.forEach((g) => {
+        const cur = getGameEstimatedValue(g);
+        const newVal = Math.max(1, Math.round(cur * (1 + percent / 100)));
+        onUpdateGamePrice(g.id, newVal);
+      });
+    }
+  };
+
+  const handleResetCustomPrices = () => {
+    if (onResetGamePrice) {
+      games.forEach((g) => onResetGamePrice(g.id));
+    }
+  };
+
+  // Compute total cote and breakdown per console for this table's dataset
+  const { totalCote, totalCopies, consoleBreakdown } = useMemo(() => {
+    let total = 0;
+    let copies = 0;
+    const consolesMap: Record<
+      string,
+      { count: number; copies: number; totalValue: number }
+    > = {};
+
+    games.forEach((g) => {
+      const unitValue = getGameEstimatedValue(g);
+      const qty = g.quantity || 1;
+      const lineValue = unitValue * qty;
+
+      total += lineValue;
+      copies += qty;
+
+      if (!consolesMap[g.console]) {
+        consolesMap[g.console] = { count: 0, copies: 0, totalValue: 0 };
+      }
+      consolesMap[g.console].count += 1;
+      consolesMap[g.console].copies += qty;
+      consolesMap[g.console].totalValue += lineValue;
+    });
+
+    const breakdown = Object.entries(consolesMap)
+      .map(([consoleName, stats]) => ({
+        consoleName,
+        count: stats.count,
+        copies: stats.copies,
+        totalValue: stats.totalValue,
+        percent: total > 0 ? Math.round((stats.totalValue / total) * 100) : 0,
+        theme: getConsoleTheme(consoleName),
+      }))
+      .sort((a, b) => b.totalValue - a.totalValue); // Sorted by highest cote
+
+    return {
+      totalCote: total,
+      totalCopies: copies,
+      consoleBreakdown: breakdown,
+    };
+  }, [games]);
+
+  // Handle column sort toggle
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      // For value and rating, default to descending (highest first)
+      setSortDir(field === 'value' || field === 'rating' ? 'desc' : 'asc');
+    }
+  };
+
+  // Sorted games list
+  const sortedGames = useMemo(() => {
+    return [...games].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'title':
+          comparison = a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' });
+          break;
+        case 'console':
+          comparison = a.console.localeCompare(b.console, 'fr', { sensitivity: 'base' });
+          break;
+        case 'quantity':
+          comparison = (a.quantity || 1) - (b.quantity || 1);
+          break;
+        case 'releaseYear':
+          comparison = (a.releaseYear || 0) - (b.releaseYear || 0);
+          break;
+        case 'value': {
+          const valA = getGameEstimatedValue(a) * (a.quantity || 1);
+          const valB = getGameEstimatedValue(b) * (b.quantity || 1);
+          comparison = valA - valB;
+          break;
+        }
+        case 'rating':
+          comparison = (a.rating || 0) - (b.rating || 0);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortDir === 'asc' ? comparison : -comparison;
+    });
+  }, [games, sortField, sortDir]);
+
+  const renderSortIndicator = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-slate-300 group-hover:text-slate-500" />;
+    }
+    return sortDir === 'asc' ? (
+      <ArrowUp className="w-3 h-3 text-indigo-600 font-bold" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-indigo-600 font-bold" />
+    );
+  };
+
+  return (
+    <div className="space-y-3.5">
+      {/* 1. Synthesis Header: Cote Totale & Cote par Console (shown only in Cote Argus) */}
+      {!isSubSection && games.length > 0 && (
+        <div
+          id="cote-argus-summary"
+          className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs space-y-3"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+            {/* Cote Totale Highlight */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center shrink-0">
+                <Coins className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Cote Totale Argus
+                  </span>
+                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60">
+                    {games.length} jeu{games.length > 1 ? 'x' : ''} • {totalCopies} ex.
+                  </span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black font-mono text-emerald-950 tracking-tight">
+                  {totalCote.toLocaleString('fr-FR')} €
+                </div>
+              </div>
+            </div>
+
+            {/* Actions & Source Indicators */}
+            <div className="flex items-center flex-wrap gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setIsUpdateModalOpen(true)}
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                title="Mettre à jour les cotes ou ajuster les prix"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Mettre à jour les prix</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSourceBanner((prev) => !prev)}
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                title="Afficher les informations sur les sources PriceCharting & Mister Game Price"
+              >
+                <Info className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Source : PriceCharting</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Expandable Source attribution & method banner */}
+          {showSourceBanner && (
+            <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 text-xs text-emerald-950 space-y-1.5 animate-fadeIn">
+              <div className="flex items-center justify-between font-bold text-emerald-900">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  Origine et calcul de la cote
+                </span>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={COTE_SOURCE_INFO.primaryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-emerald-700 hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    PriceCharting.com <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href={COTE_SOURCE_INFO.secondaryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-indigo-700 hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    MisterGamePrice.com <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+              <p className="text-[11px] leading-relaxed text-emerald-900/90">
+                {COTE_SOURCE_INFO.description} Vous pouvez modifier individuellement le prix de chaque jeu avec l'icône ✏️ ou cliquer sur « Mettre à jour les prix » pour recalculer automatiquement l'ensemble.
+              </p>
+            </div>
+          )}
+
+          {/* Cote par Console (Breakdown Cards / Pills) */}
+          {consoleBreakdown.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                <span className="flex items-center gap-1">
+                  <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                  Cote par console ({consoleBreakdown.length} console{consoleBreakdown.length > 1 ? 's' : ''})
+                </span>
+                <span className="text-[10px] text-slate-400">Classées par valeur décroissante</span>
+              </div>
+
+              <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {consoleBreakdown.map((item) => (
+                  <div
+                    key={item.consoleName}
+                    onClick={() => onSelectConsole && onSelectConsole(item.consoleName)}
+                    className={`flex items-center justify-between p-2 rounded-xl border bg-slate-50/60 hover:bg-indigo-50/40 hover:border-indigo-200 transition-colors text-xs ${
+                      onSelectConsole ? 'cursor-pointer' : ''
+                    }`}
+                    title={`${item.consoleName} : ${item.totalValue} € (${item.count} jeux, ${item.copies} exemplaires)`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: item.theme.accentColor }}
+                      />
+                      <span className="font-bold text-slate-800 truncate text-[11px]">
+                        {item.consoleName}
+                      </span>
+                    </div>
+
+                    <div className="text-right shrink-0 ml-2">
+                      <span className="font-black font-mono text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px]">
+                        {item.totalValue.toLocaleString('fr-FR')} €
+                      </span>
+                      <span className="block text-[9px] text-slate-400">
+                        {item.count} j. ({item.percent}%)
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Interactive Data Table */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th className="py-3 px-3 w-12 text-center">Aperçu</th>
+
+                {/* Titre (sortable) */}
+                <th
+                  onClick={() => handleSort('title')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Titre</span>
+                    {renderSortIndicator('title')}
+                  </div>
+                </th>
+
+                {/* Console (sortable) */}
+                <th
+                  onClick={() => handleSort('console')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Console</span>
+                    {renderSortIndicator('console')}
+                  </div>
+                </th>
+
+                {/* Stock / Qté (sortable) */}
+                <th
+                  onClick={() => handleSort('quantity')}
+                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Stock</span>
+                    {renderSortIndicator('quantity')}
+                  </div>
+                </th>
+
+                {/* Année (sortable) */}
+                <th
+                  onClick={() => handleSort('releaseYear')}
+                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Année</span>
+                    {renderSortIndicator('releaseYear')}
+                  </div>
+                </th>
+
+                <th className="py-3 px-4">Code-barres</th>
+                <th className="py-3 px-4">Genre</th>
+                <th className="py-3 px-3 text-center">État</th>
+
+                {/* Cote Occasion (sortable, prominent) */}
+                <th
+                  onClick={() => handleSort('value')}
+                  className="py-3 px-3 text-right cursor-pointer bg-emerald-50/40 hover:bg-emerald-100/40 text-emerald-900 border-x border-emerald-100 transition-colors group select-none"
+                  title="Trier par valeur de la cote estimée"
+                >
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Cote Occasion</span>
+                    {renderSortIndicator('value')}
+                  </div>
+                </th>
+
+                <th className="py-3 px-3 text-center">Statut</th>
+
+                {/* Note (sortable) */}
+                <th
+                  onClick={() => handleSort('rating')}
+                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Note</span>
+                    {renderSortIndicator('rating')}
+                  </div>
+                </th>
+
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              {sortedGames.map((game) => {
+                const theme = getConsoleTheme(game.console);
+                const conditionInfo = CONDITION_LABELS[game.condition] || { label: game.condition };
+                const statusInfo = STATUS_LABELS[game.status] || { label: game.status, color: 'bg-slate-100 text-slate-700' };
+                const unitEstimatedValue = getGameEstimatedValue(game);
+                const qty = game.quantity || 1;
+                const lineTotalValue = unitEstimatedValue * qty;
+
+                return (
+                  <tr
+                    key={game.id}
+                    id={`game-row-${game.id}`}
+                    onClick={() => onSelect(game)}
+                    className="hover:bg-indigo-50/40 transition-colors cursor-pointer"
+                  >
+                    {/* Miniature */}
+                    <td className="py-2 px-3 text-center">
+                      <div className="w-9 h-11 rounded bg-slate-900 mx-auto overflow-hidden border border-slate-200/70 shrink-0 flex items-center justify-center shadow-2xs">
+                        {game.coverUrl ? (
+                          <img
+                            src={game.coverUrl}
+                            alt={game.title}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Gamepad2 className="w-4 h-4 text-slate-500" />
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Title & publisher */}
+                    <td className="py-2 px-4 font-bold text-slate-900 max-w-xs">
+                      <span className="hover:text-indigo-600 transition-colors line-clamp-1">
+                        {game.title}
+                      </span>
+                      {game.publisher && (
+                        <span className="block text-[11px] font-normal text-slate-400 truncate">
+                          {game.publisher}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Console */}
+                    <td className="py-2 px-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${theme.bgBadge} ${theme.borderBadge}`}
+                      >
+                        {game.console}
+                      </span>
+                    </td>
+
+                    {/* Stock Quantity */}
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-xs font-bold font-mono ${
+                          qty > 1
+                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {qty}
+                      </span>
+                    </td>
+
+                    {/* Year */}
+                    <td className="py-2 px-3 text-center whitespace-nowrap font-mono text-slate-600">
+                      {game.releaseYear || '-'}
+                    </td>
+
+                    {/* Barcode */}
+                    <td className="py-2 px-4 whitespace-nowrap font-mono text-[11px]">
+                      {game.barcode ? (
+                        <span className="inline-flex items-center gap-1 text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                          <Barcode className="w-3 h-3 text-slate-400" />
+                          {game.barcode}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </td>
+
+                    {/* Genre */}
+                    <td className="py-2 px-4 whitespace-nowrap text-slate-600">
+                      {game.genre || '-'}
+                    </td>
+
+                    {/* Condition */}
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">
+                        {conditionInfo.label}
+                      </span>
+                    </td>
+
+                    {/* Cote Occasion (Game specific cote) with inline editing and PriceCharting lookup */}
+                    <td
+                      className="py-2 px-3 text-right whitespace-nowrap bg-emerald-50/20 border-x border-emerald-100/60"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {editingPriceGameId === game.id ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            value={tempPrice}
+                            onChange={(e) => setTempPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSavePrice(game.id);
+                              if (e.key === 'Escape') setEditingPriceGameId(null);
+                            }}
+                            autoFocus
+                            className="w-16 px-1.5 py-0.5 bg-white border border-emerald-500 rounded font-mono font-bold text-xs text-right text-emerald-950 shadow-inner focus:outline-none"
+                          />
+                          <span className="text-xs font-bold text-emerald-900 font-mono">€</span>
+                          <button
+                            type="button"
+                            onClick={() => handleSavePrice(game.id)}
+                            className="p-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-2xs"
+                            title="Enregistrer ce prix"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingPriceGameId(null)}
+                            className="p-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
+                            title="Annuler"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          {onResetGamePrice && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onResetGamePrice(game.id);
+                                setEditingPriceGameId(null);
+                              }}
+                              className="px-1.5 py-0.5 text-[10px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded font-semibold cursor-pointer"
+                              title="Réinitialiser à la cote auto PriceCharting"
+                            >
+                              Auto
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end group/price">
+                          <div className="flex items-center justify-end gap-1">
+                            <span
+                              onClick={() => {
+                                setEditingPriceGameId(game.id);
+                                setTempPrice(unitEstimatedValue);
+                              }}
+                              className="font-black font-mono text-emerald-900 bg-emerald-50 border border-emerald-200/80 hover:border-emerald-400 hover:bg-emerald-100/50 px-2 py-0.5 rounded text-xs shadow-2xs cursor-pointer transition"
+                              title="Cliquer pour modifier directement ce prix"
+                            >
+                              {unitEstimatedValue} €
+                            </span>
+
+                            {/* Quick edit button */}
+                            {onUpdateGamePrice && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingPriceGameId(game.id);
+                                  setTempPrice(unitEstimatedValue);
+                                }}
+                                className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-100/60 transition cursor-pointer"
+                                title="Modifier manuellement la cote de ce jeu"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+
+                            {/* Direct link to PriceCharting */}
+                            <a
+                              href={getPriceChartingSearchUrl(game.title, game.console)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-100/60 transition cursor-pointer"
+                              title={`Consulter la cote sur PriceCharting.com (${game.title})`}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {game.estimatedValue !== undefined && (
+                              <span
+                                className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 px-1 rounded border border-indigo-200/50"
+                                title="Prix personnalisé manuellement"
+                              >
+                                prix fixé
+                              </span>
+                            )}
+                            {qty > 1 && (
+                              <span className="text-[10px] text-emerald-700 font-mono font-medium">
+                                Total: {lineTotalValue} € ({qty} ex.)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Status */}
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${statusInfo.color}`}
+                      >
+                        {statusInfo.label}
+                      </span>
+                    </td>
+
+                    {/* Rating */}
+                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                      {game.rating && game.rating > 0 ? (
+                        <span className="inline-flex items-center gap-0.5 text-amber-500 font-bold">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          {game.rating}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-2 px-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          title="Détails du jeu"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect(game);
+                          }}
+                          className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Supprimer ce jeu"
+                          onClick={(e) => onDelete(game.id, e)}
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+
+            {/* 3. Table Footer: Grand Total Row */}
+            <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-bold text-slate-900">
+              <tr>
+                <td colSpan={3} className="py-3 px-4 text-left">
+                  <span className="text-xs uppercase tracking-wider text-slate-600">
+                    Total : {games.length} jeu{games.length > 1 ? 'x' : ''}
+                  </span>
+                </td>
+                <td className="py-3 px-3 text-center font-mono text-xs">
+                  <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800">
+                    {totalCopies} ex.
+                  </span>
+                </td>
+                <td colSpan={4}></td>
+                {/* Total Cote Col */}
+                <td className="py-3 px-3 text-right bg-emerald-100/70 border-x border-emerald-200">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-800 font-extrabold">
+                      Cote totale
+                    </span>
+                    <span className="text-sm font-black font-mono text-emerald-950">
+                      {totalCote.toLocaleString('fr-FR')} €
+                    </span>
+                  </div>
+                </td>
+                <td colSpan={3}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* Update Prices Modal */}
+      <UpdatePricesModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        games={games}
+        onRecalculateAll={() => onRecalculateAllPrices && onRecalculateAllPrices()}
+        onApplyPercentage={handleApplyPercentage}
+        onUpdateSinglePrice={(id, price) => onUpdateGamePrice && onUpdateGamePrice(id, price)}
+        onResetCustomPrices={handleResetCustomPrices}
+      />
+    </div>
+  );
+};

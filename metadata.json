@@ -1,0 +1,10 @@
+{
+  "name": "Collection de Jeux Vidéo",
+  "description": "Application de gestion de collection de jeux vidéo avec scan de code-barres, cote d'occasion argus en temps réel et estimation de la valeur totale de la collection.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
