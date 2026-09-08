@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { CONSOLE_LIST } from '../data/sampleGames';
@@ -26,6 +26,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const [activeTab, setActiveTab] = useState<'barcode' | 'manual'>(
     initialBarcodeMode ? 'barcode' : 'manual'
   );
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialBarcodeMode ? 'barcode' : 'manual');
+    }
+  }, [isOpen, initialBarcodeMode]);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -323,71 +329,72 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-hidden">
       <div
         id="add-game-modal"
-        className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8"
+        className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:max-w-xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
-              <Disc3 className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shrink-0">
+              <Disc3 className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Ajouter un jeu vidéo</h2>
-              <p className="text-xs text-slate-500">Par code-barres ou saisie manuelle</p>
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">Ajouter un jeu vidéo</h2>
+              <p className="text-[11px] sm:text-xs text-slate-500 truncate">Par scan caméra direct ou saisie manuelle</p>
             </div>
           </div>
           <button
             id="btn-close-modal"
             type="button"
             onClick={handleClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer active:scale-95"
+            title="Fermer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab switcher */}
-        <div className="flex border-b border-slate-200 bg-slate-100/70 p-1.5 gap-1">
+        <div className="flex border-b border-slate-200 bg-slate-100/80 p-1.5 gap-1 shrink-0">
           <button
             id="tab-barcode"
             type="button"
             onClick={() => setActiveTab('barcode')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer ${
+            className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
               activeTab === 'barcode'
                 ? 'bg-white text-indigo-700 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Barcode className="w-4 h-4" />
-            Recherche par code-barres
+            <span>Scanner code-barres</span>
           </button>
           <button
             id="tab-manual"
             type="button"
             onClick={() => setActiveTab('manual')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer ${
+            className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
               activeTab === 'manual'
                 ? 'bg-white text-indigo-700 shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <PenTool className="w-4 h-4" />
-            Saisie manuelle {barcode ? '(Code associé)' : ''}
+            <span>Saisie manuelle {barcode ? '(Code associé)' : ''}</span>
           </button>
         </div>
 
         {/* Feedback message */}
         {stockUpdatedSuccess ? (
-          <div className="mx-6 mt-4 p-3.5 rounded-xl text-xs flex items-center gap-2.5 border bg-emerald-50 text-emerald-900 border-emerald-300 font-medium">
-            <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+          <div className="mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border bg-emerald-50 text-emerald-900 border-emerald-300 font-medium shrink-0">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{stockUpdatedSuccess}</span>
           </div>
         ) : lookupMessage && (
           <div
-            className={`mx-6 mt-4 p-3 rounded-xl text-xs flex items-start gap-2 border ${
+            className={`mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-start gap-2 border shrink-0 ${
               lookupMessage.type === 'success'
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : lookupMessage.type === 'warning'
@@ -404,12 +411,13 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
           </div>
         )}
 
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {activeTab === 'barcode' ? (
             <BarcodeScanner
               onBarcodeDetected={handleBarcodeDetected}
               isLoading={isSearching}
               existingGames={existingGames}
+              autoStart={true}
             />
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">

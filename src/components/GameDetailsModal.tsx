@@ -99,10 +99,10 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-hidden">
       <div
         id="game-details-modal"
-        className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8"
+        className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-y-auto flex flex-col"
       >
         {/* Header Cover Banner */}
         <div className="relative min-h-56 bg-slate-950 overflow-hidden flex items-center p-6 border-b border-slate-100">

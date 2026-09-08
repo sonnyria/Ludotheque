@@ -1,1 +1,50 @@
 @import "tailwindcss";
+
+/* Html5Qrcode video & scanner responsive fixes for smartphones */
+#interactive-barcode-viewport {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background-color: #020617 !important;
+}
+
+#interactive-barcode-viewport video {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+#interactive-barcode-viewport canvas {
+  max-width: 100% !important;
+}
+
+#interactive-barcode-viewport #qr-shaded-region {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+}
+
+/* Smooth laser scanner beam animation */
+@keyframes laserSweep {
+  0% {
+    top: 10%;
+    opacity: 0.6;
+  }
+  50% {
+    top: 85%;
+    opacity: 1;
+  }
+  100% {
+    top: 10%;
+    opacity: 0.6;
+  }
+}
+
+.animate-laser {
+  animation: laserSweep 2s ease-in-out infinite;
+}
