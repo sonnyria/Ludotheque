@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
-import { CONSOLE_LIST } from '../data/sampleGames';
+import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
@@ -92,7 +92,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     setLookupMessage(null);
     setStockUpdatedSuccess(null);
 
-    // Fast check: is this barcode already present in our existing stock?
+    // 1. Fast check: is this barcode already present in our existing stock?
     const localMatch = existingGames.find(
       (g) => g.barcode && g.barcode.trim() === code.trim()
     );
@@ -121,12 +121,45 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       return;
     }
 
+    // 2. Fast check in sample/preset games (instant 0ms resolution)
+    const presetMatch = INITIAL_GAMES.find(
+      (g) => g.barcode && g.barcode.trim() === code.trim()
+    );
+    if (presetMatch) {
+      setTitle(presetMatch.title || '');
+      if (CONSOLE_LIST.includes(presetMatch.console as any)) {
+        setConsoleName(presetMatch.console);
+      } else {
+        setConsoleName('Autre');
+        setCustomConsole(presetMatch.console || '');
+      }
+      if (presetMatch.releaseYear) setReleaseYear(presetMatch.releaseYear);
+      if (presetMatch.publisher) setPublisher(presetMatch.publisher);
+      if (presetMatch.developer) setDeveloper(presetMatch.developer);
+      if (presetMatch.genre) setGenre(presetMatch.genre);
+      if (presetMatch.coverUrl) setCoverUrl(presetMatch.coverUrl);
+      if (presetMatch.notes && !notes) setNotes(presetMatch.notes);
+
+      setLookupMessage({
+        type: 'success',
+        text: `Jeu identifié : "${presetMatch.title}" sur ${presetMatch.console}. Vérifiez les informations ci-dessous et enregistrez !`,
+      });
+      setIsSearching(false);
+      setActiveTab('manual');
+      return;
+    }
+
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+
       const res = await fetch('/api/games/lookup-barcode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode: code }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       const data = await res.json();
 
@@ -147,7 +180,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         if (g.coverUrl) {
           setCoverUrl(g.coverUrl);
         } else {
-          // Auto-fetch official cover
+          // Auto-fetch official cover in background
           fetch(`/api/games/find-cover?title=${encodeURIComponent(g.title)}&console=${encodeURIComponent(g.console || '')}`)
             .then((r) => r.json())
             .then((d) => {
@@ -164,14 +197,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       } else {
         setLookupMessage({
           type: 'warning',
-          text: data.message || 'Code-barres inconnu. Vous pouvez renseigner le nom et la console manuellement.',
+          text: data.message || 'Code-barres non répertorié automatiquement. Saisie manuelle prête ci-dessous.',
         });
         setActiveTab('manual');
       }
-    } catch (err: any) {
+    } catch {
       setLookupMessage({
-        type: 'error',
-        text: 'Erreur réseau lors de la recherche du code-barres. Saisie manuelle disponible.',
+        type: 'warning',
+        text: 'Recherche automatisée non disponible. Le code-barres a été conservé, complétez le titre ci-dessous.',
       });
       setActiveTab('manual');
     } finally {
@@ -186,11 +219,17 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
     try {
       const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+
       const res = await fetch('/api/games/search-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: title, console: targetConsole }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (data.results && data.results.length > 0) {
         const best = data.results[0];
@@ -214,11 +253,16 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
           type: 'success',
           text: `Détails enrichis automatiquement pour "${best.title}" !`,
         });
+      } else {
+        setLookupMessage({
+          type: 'warning',
+          text: data.message || 'Aucun détail supplémentaire trouvé automatiquement pour ce titre.',
+        });
       }
-    } catch (err) {
+    } catch {
       setLookupMessage({
-        type: 'error',
-        text: 'Impossible d\'enrichir avec l\'IA pour le moment.',
+        type: 'warning',
+        text: 'Recherche d\'enrichissement temporairement indisponible. Vous pouvez saisir les détails manuellement.',
       });
     } finally {
       setIsSearching(false);
@@ -228,9 +272,17 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const handleFetchCover = async () => {
     if (!title.trim()) return;
     setIsSearching(true);
+    setLookupMessage(null);
     try {
       const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
-      const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(title)}&console=${encodeURIComponent(targetConsole)}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(title)}&console=${encodeURIComponent(targetConsole)}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (data.coverUrl) {
         setCoverUrl(data.coverUrl);
@@ -241,13 +293,13 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       } else {
         setLookupMessage({
           type: 'warning',
-          text: 'Aucune jaquette officielle trouvée automatiquement. Vous pouvez coller une URL d\'image.',
+          text: 'Aucune jaquette officielle trouvée automatiquement pour ce titre. Vous pouvez coller le lien d\'une image.',
         });
       }
-    } catch (err) {
+    } catch {
       setLookupMessage({
-        type: 'error',
-        text: 'Erreur lors de la recherche de la jaquette.',
+        type: 'warning',
+        text: 'Recherche de jaquette non disponible pour le moment. Vous pouvez coller manuellement l\'URL d\'une image.',
       });
     } finally {
       setIsSearching(false);

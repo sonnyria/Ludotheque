@@ -14,6 +14,17 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
+// Permissive CORS middleware for dev and iframe environments
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Lazy GoogleGenAI initialization
 let aiClient: GoogleGenAI | null = null;
 function getAi(): GoogleGenAI | null {
@@ -155,7 +166,47 @@ const KNOWN_BARCODES: Record<string, { title: string; console: string; releaseYe
     genre: 'Plateforme',
     synopsis: 'Mario et Luigi partent explorer Dinosaur Land pour sauver la Princesse Peach de Bowser.',
     coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F3%2F32%2FSuper_Mario_World_Coverart.png',
-  }
+  },
+  '0045496590420': {
+    title: 'Mario Kart 8 Deluxe',
+    console: 'Nintendo Switch',
+    releaseYear: 2017,
+    publisher: 'Nintendo',
+    developer: 'Nintendo EPD',
+    genre: 'Course arcade',
+    synopsis: 'Faites la course et affrontez vos amis dans la version ultime de Mario Kart 8 sur Nintendo Switch.',
+    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fb%2Fba%2FMario_Kart_8_Box_Art.jpg',
+  },
+  '0045496596439': {
+    title: 'Animal Crossing: New Horizons',
+    console: 'Nintendo Switch',
+    releaseYear: 2020,
+    publisher: 'Nintendo',
+    developer: 'Nintendo EPD',
+    genre: 'Simulation de vie',
+    synopsis: 'Créez votre propre paradis sur une île déserte vierge avec Tom Nook.',
+    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F1%2F1f%2FAnimal_Crossing_New_Horizons.jpg',
+  },
+  '3307216262435': {
+    title: "Assassin's Creed Valhalla",
+    console: 'PlayStation 4',
+    releaseYear: 2020,
+    publisher: 'Ubisoft',
+    developer: 'Ubisoft Montreal',
+    genre: 'Action-RPG',
+    synopsis: 'Incarnez Eivor, un redoutable chef viking dont les récits de combat ont traversé les âges.',
+    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Ff%2Ff5%2FAssassins_Creed_Valhalla_cover.jpg',
+  },
+  '0711719541189': {
+    title: 'The Last of Us Part I',
+    console: 'PlayStation 5',
+    releaseYear: 2022,
+    publisher: 'Sony Interactive Entertainment',
+    developer: 'Naughty Dog',
+    genre: 'Action-Aventure / Survie',
+    synopsis: 'Redécouvrez l\'aventure poignante de Joel et Ellie à travers une Amérique post-pandémique dévastée.',
+    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F4%2F46%2FThe_Last_of_Us_Part_I_cover.png',
+  },
 };
 
 // Clean barcode string
@@ -172,59 +223,93 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackMsg: str
   ]);
 }
 
-// Helper to find official box art cover
+// Fast box art cover search via Wikipedia
 async function findOfficialCover(title: string, consoleName: string = ''): Promise<string | null> {
   if (!title || !title.trim()) return null;
 
-  // Check known barcodes for exact title match
+  const normalizedTitle = title.trim().toLowerCase();
+
+  // 1. Direct match in local dictionary
   for (const item of Object.values(KNOWN_BARCODES)) {
-    if (item.title.toLowerCase() === title.trim().toLowerCase() && item.coverUrl) {
+    if (item.title.toLowerCase() === normalizedTitle && item.coverUrl) {
       return item.coverUrl;
     }
   }
 
-  // Query Wikipedia for authentic game box art
-  try {
-    const queries = [
-      `${title} (${consoleName} video game)`,
-      `${title} (video game)`,
-      `${title} video game`,
-      title
-    ];
-    for (const q of queries) {
-      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&utf8=&format=json`;
+  // Helper to query Wikipedia pageimages with search generator
+  const searchWikiImage = async (wikiDomain: string, searchQuery: string, timeoutMs: number = 3000): Promise<string | null> => {
+    try {
+      const url = `https://${wikiDomain}/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(searchQuery)}&gsrlimit=1&prop=pageimages|images&pilicense=any&pithumbsize=600&format=json`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(searchUrl, {
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectionApp/1.0 (contact@collection.local)' }
+        headers: { 'User-Agent': 'GameVaultApp/1.0 (contact@gamecollection.local)' }
       });
       clearTimeout(timeout);
-      if (!res.ok) continue;
+      if (!res.ok) return null;
       const data: any = await res.json();
-      const hits = data?.query?.search;
-      if (hits && hits.length > 0) {
-        const topTitle = hits[0].title;
-        const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`;
-        const sController = new AbortController();
-        const sTimeout = setTimeout(() => sController.abort(), 3500);
-        const sRes = await fetch(summaryUrl, {
-          signal: sController.signal,
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectionApp/1.0 (contact@collection.local)' }
+      const pages = data?.query?.pages;
+      if (!pages) return null;
+
+      const page: any = Object.values(pages)[0];
+      if (page?.thumbnail?.source && typeof page.thumbnail.source === 'string') {
+        return `/api/covers/proxy?url=${encodeURIComponent(page.thumbnail.source)}`;
+      }
+
+      // If no thumbnail directly found, check images list for Box art or Cover
+      const imageFiles: Array<{ title: string }> = page?.images || [];
+      const boxArt = imageFiles.find(img => 
+        /box\s?art|cover|jacket|jaquette/i.test(img.title) && !/logo|icon|symbol|flag/i.test(img.title)
+      );
+      if (boxArt) {
+        const infoUrl = `https://${wikiDomain}/w/api.php?action=query&titles=${encodeURIComponent(boxArt.title)}&prop=imageinfo&iiprop=url&iiurlwidth=600&format=json`;
+        const infoController = new AbortController();
+        const infoTimeout = setTimeout(() => infoController.abort(), 2000);
+        const infoRes = await fetch(infoUrl, {
+          signal: infoController.signal,
+          headers: { 'User-Agent': 'GameVaultApp/1.0 (contact@gamecollection.local)' }
         });
-        clearTimeout(sTimeout);
-        if (sRes.ok) {
-          const sData: any = await sRes.json();
-          const thumb = sData?.thumbnail?.source;
-          if (thumb && typeof thumb === 'string') {
-            return `/api/covers/proxy?url=${encodeURIComponent(thumb)}`;
+        clearTimeout(infoTimeout);
+        if (infoRes.ok) {
+          const infoData: any = await infoRes.json();
+          const infoPages = infoData?.query?.pages;
+          if (infoPages) {
+            const imgPage: any = Object.values(infoPages)[0];
+            const imgUrl = imgPage?.imageinfo?.[0]?.thumburl || imgPage?.imageinfo?.[0]?.url;
+            if (imgUrl && typeof imgUrl === 'string') {
+              return `/api/covers/proxy?url=${encodeURIComponent(imgUrl)}`;
+            }
           }
         }
       }
+    } catch {
+      // ignore
     }
-  } catch (e) {
+    return null;
+  };
+
+  // Try queries with clean timeout
+  try {
+    const queryEn = consoleName && consoleName !== 'Autre' 
+      ? `${title} ${consoleName} video game` 
+      : `${title} video game`;
+    
+    // First attempt: English Wikipedia with platform
+    let cover = await searchWikiImage('en.wikipedia.org', queryEn, 3000);
+    if (cover) return cover;
+
+    // Second attempt: French Wikipedia (often has EU/FR box covers)
+    cover = await searchWikiImage('fr.wikipedia.org', `${title} jeu vidéo`, 2500);
+    if (cover) return cover;
+
+    // Third attempt: simple title on English Wikipedia
+    cover = await searchWikiImage('en.wikipedia.org', title, 2000);
+    if (cover) return cover;
+  } catch {
     // ignore
   }
+
   return null;
 }
 
@@ -268,14 +353,19 @@ app.get('/api/covers/proxy', async (req, res) => {
 
 // API: Find official cover for any game title & console
 app.get('/api/games/find-cover', async (req, res) => {
-  const title = (req.query.title as string) || '';
-  const consoleName = (req.query.console as string) || '';
-  if (!title.trim()) {
-    return res.status(400).json({ error: 'Titre requis' });
-  }
+  try {
+    const title = (req.query.title as string) || '';
+    const consoleName = (req.query.console as string) || '';
+    if (!title.trim()) {
+      return res.status(400).json({ error: 'Titre requis' });
+    }
 
-  const coverUrl = await findOfficialCover(title, consoleName);
-  return res.json({ coverUrl, title, console: consoleName });
+    const coverUrl = await findOfficialCover(title, consoleName);
+    return res.json({ coverUrl: coverUrl || null, title, console: consoleName });
+  } catch (err: any) {
+    console.warn('find-cover error:', err?.message || err);
+    return res.json({ coverUrl: null, title: req.query.title || '', console: req.query.console || '' });
+  }
 });
 
 // API: Lookup game by barcode
@@ -291,7 +381,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       return res.status(400).json({ error: 'Code-barres non valide (chiffres attendus).' });
     }
 
-    // 1. Check known local table
+    // 1. Check known local table for instant zero-latency match
     if (KNOWN_BARCODES[cleanCode]) {
       const match = KNOWN_BARCODES[cleanCode];
       return res.json({
@@ -311,7 +401,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       return res.status(200).json({
         found: false,
         barcode: cleanCode,
-        message: 'Clé API Gemini non configurée pour la recherche automatisée, vous pouvez entrer les détails manuellement.'
+        message: 'Recherche automatisée indisponible (clé API non configurée). Vous pouvez renseigner les informations manuellement.'
       });
     }
 
@@ -335,7 +425,7 @@ Retourne obligatoirement un objet JSON respectant les clés suivantes :
     try {
       aiResponse = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
@@ -355,10 +445,11 @@ Retourne obligatoirement un objet JSON respectant les clés suivantes :
             }
           }
         }),
-        8000,
+        6000,
         'Délai de recherche dépassé.'
       );
     } catch (aiErr: any) {
+      console.warn('Gemini lookup error:', aiErr?.message || aiErr);
       return res.json({
         found: false,
         barcode: cleanCode,
@@ -366,7 +457,13 @@ Retourne obligatoirement un objet JSON respectant les clés suivantes :
       });
     }
 
-    const parsed = JSON.parse(aiResponse.text || '{}');
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(aiResponse.text || '{}');
+    } catch {
+      parsed = {};
+    }
+
     if (!parsed.title || parsed.title.trim() === '' || parsed.confidence === 'low') {
       return res.json({
         found: false,
@@ -375,12 +472,12 @@ Retourne obligatoirement un objet JSON respectant les clés suivantes :
       });
     }
 
-    // Try finding official cover
+    // Try finding official cover (fast lookup)
     let autoCoverUrl: string | undefined = undefined;
     try {
       const foundCover = await findOfficialCover(parsed.title, parsed.console || '');
       if (foundCover) autoCoverUrl = foundCover;
-    } catch (e) {
+    } catch {
       // ignore
     }
 
@@ -402,7 +499,11 @@ Retourne obligatoirement un objet JSON respectant les clés suivantes :
     });
   } catch (err: any) {
     console.error('Erreur lookup-barcode:', err);
-    return res.status(500).json({ error: 'Erreur lors de la recherche du code-barres: ' + (err.message || String(err)) });
+    return res.json({
+      found: false,
+      barcode: req.body?.barcode || '',
+      message: 'Erreur lors de la recherche du code-barres. Vous pouvez renseigner les informations manuellement.'
+    });
   }
 });
 
@@ -440,7 +541,7 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
     try {
       aiResponse = await withTimeout(
         ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
@@ -462,17 +563,23 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
             }
           }
         }),
-        8000,
+        6000,
         'Délai de recherche dépassé.'
       );
     } catch (aiErr: any) {
+      console.warn('search-gemini error:', aiErr?.message || aiErr);
       return res.json({
         results: [],
-        message: 'Recherche IA expirée ou temporairement indisponible.'
+        message: 'Recherche IA temporairement indisponible.'
       });
     }
 
-    const results = JSON.parse(aiResponse.text || '[]');
+    let results: any[] = [];
+    try {
+      results = JSON.parse(aiResponse.text || '[]');
+    } catch {
+      results = [];
+    }
     
     // Attach covers if found
     const enrichedResults = await Promise.all(
@@ -480,7 +587,7 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
         try {
           const cover = await findOfficialCover(r.title, r.console);
           return { ...r, coverUrl: cover || undefined };
-        } catch (e) {
+        } catch {
           return r;
         }
       })
@@ -489,7 +596,10 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
     return res.json({ results: enrichedResults });
   } catch (err: any) {
     console.error('Erreur search-gemini:', err);
-    return res.status(500).json({ error: 'Erreur lors de la recherche: ' + (err.message || String(err)) });
+    return res.json({
+      results: [],
+      error: 'Erreur lors de la recherche: ' + (err.message || String(err))
+    });
   }
 });
 
