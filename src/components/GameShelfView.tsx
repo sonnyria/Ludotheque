@@ -2,6 +2,7 @@ import React from 'react';
 import { Game } from '../types';
 import { getConsoleTheme, STATUS_LABELS } from '../utils/consoleThemes';
 import { Barcode, Star, Gamepad2, Trash2 } from 'lucide-react';
+import { getSafeCoverUrl, handleImageError } from '../utils/imageUtils';
 
 interface GameShelfViewProps {
   games: Game[];
@@ -46,7 +47,7 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
                 <div className="relative w-full h-[calc(100%-1.5rem)] overflow-hidden bg-slate-950 flex items-center justify-center">
                   {game.coverUrl && (
                     <img
-                      src={game.coverUrl}
+                      src={getSafeCoverUrl(game.coverUrl)}
                       alt=""
                       aria-hidden="true"
                       className="absolute inset-0 w-full h-full object-cover blur-md opacity-30 scale-125 pointer-events-none"
@@ -55,13 +56,11 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
                   )}
                   {game.coverUrl ? (
                     <img
-                      src={game.coverUrl}
+                      src={getSafeCoverUrl(game.coverUrl)}
                       alt={game.title}
                       className="relative z-10 w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-300 drop-shadow-md"
                       referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
+                      onError={(e) => handleImageError(e, game.coverUrl)}
                     />
                   ) : (
                     <div className="w-full h-full p-3 bg-gradient-to-br from-slate-800 to-slate-900 flex flex-col items-center justify-center text-center">

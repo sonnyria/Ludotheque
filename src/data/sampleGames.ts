@@ -82,7 +82,7 @@ export const INITIAL_GAMES: Game[] = [
     publisher: 'Sony Interactive Entertainment',
     developer: 'Santa Monica Studio',
     genre: 'Action-Aventure',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fe%2Fee%2FGod_of_War_Ragnar%25C3%25B6k_cover.jpg',
+    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fe%2Fee%2FGod_of_War_Ragnar%C3%B6k_cover.jpg',
     condition: 'neuf',
     status: 'completed',
     rating: 5,

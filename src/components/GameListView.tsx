@@ -2,6 +2,7 @@ import React from 'react';
 import { Game } from '../types';
 import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { Barcode, Calendar, Trash2, Star, Eye, Gamepad2, Boxes } from 'lucide-react';
+import { getSafeCoverUrl, handleImageError } from '../utils/imageUtils';
 
 interface GameListViewProps {
   games: Game[];
@@ -30,13 +31,11 @@ export const GameListView: React.FC<GameListViewProps> = ({ games, onSelect, onD
               <div className="w-11 h-14 sm:w-13 sm:h-16 rounded-lg bg-slate-900 shrink-0 overflow-hidden relative shadow-xs border border-slate-200/70 flex items-center justify-center">
                 {game.coverUrl ? (
                   <img
-                    src={game.coverUrl}
+                    src={getSafeCoverUrl(game.coverUrl)}
                     alt=""
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
+                    onError={(e) => handleImageError(e, game.coverUrl)}
                   />
                 ) : (
                   <div className="w-full h-full bg-slate-800 flex items-center justify-center text-slate-400">

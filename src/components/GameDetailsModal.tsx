@@ -4,6 +4,7 @@ import { Game, GameCondition, GameStatus } from '../types';
 import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { CONSOLE_LIST } from '../data/sampleGames';
 import { estimateMarketValue, calculateValueMargin, getPriceChartingSearchUrl, COTE_SOURCE_INFO } from '../utils/marketPriceGuide';
+import { getSafeCoverUrl, handleImageError } from '../utils/imageUtils';
 
 interface GameDetailsModalProps {
   game: Game | null;
@@ -148,10 +149,11 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
               <div className="absolute inset-y-0 left-0 w-2 bg-gradient-to-r from-white/30 via-white/10 to-transparent z-20 pointer-events-none" />
               {game.coverUrl ? (
                 <img
-                  src={game.coverUrl}
+                  src={getSafeCoverUrl(game.coverUrl)}
                   alt={`Jaquette de ${game.title}`}
                   className="w-full h-full object-contain p-1"
                   referrerPolicy="no-referrer"
+                  onError={(e) => handleImageError(e, game.coverUrl)}
                 />
               ) : (
                 <span className="text-[10px] text-slate-400 font-bold p-2 text-center">{game.console}</span>
@@ -404,7 +406,7 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                       try {
                         const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(editedTitle)}&console=${encodeURIComponent(editedConsole)}`);
                         const d = await res.json();
-                        if (d.coverUrl) setEditedCoverUrl(d.coverUrl);
+                        if (d.coverUrl) setEditedCoverUrl(getSafeCoverUrl(d.coverUrl));
                       } catch (e) {
                         // ignore
                       }
@@ -426,10 +428,11 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                   {editedCoverUrl && (
                     <div className="w-10 h-12 rounded bg-slate-900 border border-slate-300 overflow-hidden shrink-0 flex items-center justify-center">
                       <img
-                        src={editedCoverUrl}
+                        src={getSafeCoverUrl(editedCoverUrl)}
                         alt="Aperçu"
                         className="w-full h-full object-contain p-0.5"
                         referrerPolicy="no-referrer"
+                        onError={(e) => handleImageError(e, editedCoverUrl)}
                       />
                     </div>
                   )}

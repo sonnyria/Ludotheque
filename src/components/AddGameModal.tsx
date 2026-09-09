@@ -2,9 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
+import { BARCODE_CATALOG } from '../data/barcodeCatalog';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
+
+export function getSafeCoverUrl(url?: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/api/covers/proxy') || trimmed.startsWith('data:image/')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return `/api/covers/proxy?url=${encodeURIComponent(trimmed)}`;
+  }
+  return trimmed;
+}
 
 interface AddGameModalProps {
   isOpen: boolean;
@@ -121,7 +134,33 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       return;
     }
 
-    // 2. Fast check in sample/preset games (instant 0ms resolution)
+    // 2. Fast check in BARCODE_CATALOG & sample/preset games (instant 0ms resolution)
+    const cleanCode = code.replace(/\D/g, '').trim();
+    if (BARCODE_CATALOG[cleanCode]) {
+      const catMatch = BARCODE_CATALOG[cleanCode];
+      setTitle(catMatch.title || '');
+      if (CONSOLE_LIST.includes(catMatch.console as any)) {
+        setConsoleName(catMatch.console);
+      } else {
+        setConsoleName('Autre');
+        setCustomConsole(catMatch.console || '');
+      }
+      if (catMatch.releaseYear) setReleaseYear(catMatch.releaseYear);
+      if (catMatch.publisher) setPublisher(catMatch.publisher);
+      if (catMatch.developer) setDeveloper(catMatch.developer);
+      if (catMatch.genre) setGenre(catMatch.genre);
+      if (catMatch.coverUrl) setCoverUrl(getSafeCoverUrl(catMatch.coverUrl));
+      if (catMatch.synopsis && !notes) setNotes(catMatch.synopsis);
+
+      setLookupMessage({
+        type: 'success',
+        text: `Jeu identifié instantanément : "${catMatch.title}" (${catMatch.console}). Vérifiez les détails ci-dessous !`,
+      });
+      setIsSearching(false);
+      setActiveTab('manual');
+      return;
+    }
+
     const presetMatch = INITIAL_GAMES.find(
       (g) => g.barcode && g.barcode.trim() === code.trim()
     );
@@ -137,12 +176,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       if (presetMatch.publisher) setPublisher(presetMatch.publisher);
       if (presetMatch.developer) setDeveloper(presetMatch.developer);
       if (presetMatch.genre) setGenre(presetMatch.genre);
-      if (presetMatch.coverUrl) setCoverUrl(presetMatch.coverUrl);
+      if (presetMatch.coverUrl) setCoverUrl(getSafeCoverUrl(presetMatch.coverUrl));
       if (presetMatch.notes && !notes) setNotes(presetMatch.notes);
 
       setLookupMessage({
         type: 'success',
-        text: `Jeu identifié : "${presetMatch.title}" sur ${presetMatch.console}. Vérifiez les informations ci-dessous et enregistrez !`,
+        text: `Jeu identifié : "${presetMatch.title}" (${presetMatch.console}). Vérifiez les informations ci-dessous et enregistrez !`,
       });
       setIsSearching(false);
       setActiveTab('manual');
@@ -178,13 +217,13 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         if (g.genre) setGenre(g.genre);
         if (g.synopsis && !notes) setNotes(g.synopsis);
         if (g.coverUrl) {
-          setCoverUrl(g.coverUrl);
+          setCoverUrl(getSafeCoverUrl(g.coverUrl));
         } else {
           // Auto-fetch official cover in background
           fetch(`/api/games/find-cover?title=${encodeURIComponent(g.title)}&console=${encodeURIComponent(g.console || '')}`)
             .then((r) => r.json())
             .then((d) => {
-              if (d.coverUrl) setCoverUrl(d.coverUrl);
+              if (d.coverUrl) setCoverUrl(getSafeCoverUrl(d.coverUrl));
             })
             .catch(() => {});
         }
@@ -197,14 +236,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       } else {
         setLookupMessage({
           type: 'warning',
-          text: data.message || 'Code-barres non répertorié automatiquement. Saisie manuelle prête ci-dessous.',
+          text: data.message || 'Code-barres scanné avec succès ! Entrez le nom du jeu ci-dessous pour lancer la recherche automatique.',
         });
         setActiveTab('manual');
       }
     } catch {
       setLookupMessage({
         type: 'warning',
-        text: 'Recherche automatisée non disponible. Le code-barres a été conservé, complétez le titre ci-dessous.',
+        text: 'Code-barres scanné et mémorisé avec succès. Entrez le titre du jeu ci-dessous pour compléter automatiquement la fiche.',
       });
       setActiveTab('manual');
     } finally {
@@ -239,19 +278,19 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         if (!genre && best.genre) setGenre(best.genre);
         if (!notes && best.synopsis) setNotes(best.synopsis);
         if (best.coverUrl) {
-          setCoverUrl(best.coverUrl);
+          setCoverUrl(getSafeCoverUrl(best.coverUrl));
         } else {
           // Attempt to find cover
           fetch(`/api/games/find-cover?title=${encodeURIComponent(best.title)}&console=${encodeURIComponent(best.console || targetConsole)}`)
             .then((r) => r.json())
             .then((d) => {
-              if (d.coverUrl) setCoverUrl(d.coverUrl);
+              if (d.coverUrl) setCoverUrl(getSafeCoverUrl(d.coverUrl));
             })
             .catch(() => {});
         }
         setLookupMessage({
           type: 'success',
-          text: `Détails enrichis automatiquement pour "${best.title}" !`,
+          text: `Détails et jaquette enrichis automatiquement pour "${best.title}" !`,
         });
       } else {
         setLookupMessage({
@@ -285,10 +324,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
       const data = await res.json();
       if (data.coverUrl) {
-        setCoverUrl(data.coverUrl);
+        setCoverUrl(getSafeCoverUrl(data.coverUrl));
         setLookupMessage({
           type: 'success',
-          text: 'Jaquette officielle trouvée avec succès !',
+          text: 'Jaquette officielle trouvée et chargée avec succès !',
         });
       } else {
         setLookupMessage({
@@ -892,12 +931,15 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                   {coverUrl && (
                     <div className="w-12 h-16 rounded-lg bg-slate-950 overflow-hidden shrink-0 border border-slate-300 shadow-sm relative flex items-center justify-center">
                       <img
-                        src={coverUrl}
+                        src={getSafeCoverUrl(coverUrl)}
                         alt="Aperçu jaquette"
                         className="w-full h-full object-contain p-0.5"
                         referrerPolicy="no-referrer"
                         onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
+                          const target = e.target as HTMLImageElement;
+                          if (!target.src.includes('/api/covers/proxy') && (coverUrl.startsWith('http://') || coverUrl.startsWith('https://'))) {
+                            target.src = `/api/covers/proxy?url=${encodeURIComponent(coverUrl)}`;
+                          }
                         }}
                       />
                     </div>
