@@ -419,7 +419,7 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                 </div>
                 <div className="flex gap-3 items-center">
                   <input
-                    type="url"
+                    type="text"
                     value={editedCoverUrl}
                     onChange={(e) => setEditedCoverUrl(e.target.value)}
                     placeholder="URL de l'image de jaquette..."

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
-import { BARCODE_CATALOG } from '../data/barcodeCatalog';
+import { BARCODE_CATALOG, lookupBarcodeInCatalog, findGameInCatalog } from '../data/barcodeCatalog';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
@@ -135,9 +135,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     }
 
     // 2. Fast check in BARCODE_CATALOG & sample/preset games (instant 0ms resolution)
-    const cleanCode = code.replace(/\D/g, '').trim();
-    if (BARCODE_CATALOG[cleanCode]) {
-      const catMatch = BARCODE_CATALOG[cleanCode];
+    const catMatch = lookupBarcodeInCatalog(code);
+    if (catMatch) {
       setTitle(catMatch.title || '');
       if (CONSOLE_LIST.includes(catMatch.console as any)) {
         setConsoleName(catMatch.console);
@@ -151,6 +150,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       if (catMatch.genre) setGenre(catMatch.genre);
       if (catMatch.coverUrl) setCoverUrl(getSafeCoverUrl(catMatch.coverUrl));
       if (catMatch.synopsis && !notes) setNotes(catMatch.synopsis);
+      setEstimatedValue(estimateMarketValue(catMatch.title, catMatch.console, condition));
 
       setLookupMessage({
         type: 'success',
@@ -178,6 +178,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       if (presetMatch.genre) setGenre(presetMatch.genre);
       if (presetMatch.coverUrl) setCoverUrl(getSafeCoverUrl(presetMatch.coverUrl));
       if (presetMatch.notes && !notes) setNotes(presetMatch.notes);
+      setEstimatedValue(estimateMarketValue(presetMatch.title, presetMatch.console, condition));
 
       setLookupMessage({
         type: 'success',
@@ -190,7 +191,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
 
       const res = await fetch('/api/games/lookup-barcode', {
         method: 'POST',
@@ -216,6 +217,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         if (g.developer) setDeveloper(g.developer);
         if (g.genre) setGenre(g.genre);
         if (g.synopsis && !notes) setNotes(g.synopsis);
+        setEstimatedValue(estimateMarketValue(g.title, g.console, condition));
         if (g.coverUrl) {
           setCoverUrl(getSafeCoverUrl(g.coverUrl));
         } else {
@@ -256,10 +258,28 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     setIsSearching(true);
     setLookupMessage(null);
 
+    const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
+
+    // Immediate fast local enrichment
+    const localHit = findGameInCatalog(title, targetConsole) || findGameInCatalog(title);
+    if (localHit) {
+      if (localHit.console && (!consoleName || consoleName === 'Nintendo Switch' || consoleName === 'Autre')) {
+        setConsoleName(localHit.console);
+      }
+      if (!releaseYear && localHit.releaseYear) setReleaseYear(localHit.releaseYear);
+      if (!publisher && localHit.publisher) setPublisher(localHit.publisher);
+      if (!developer && localHit.developer) setDeveloper(localHit.developer);
+      if (!genre && localHit.genre) setGenre(localHit.genre);
+      if (!notes && localHit.synopsis) setNotes(localHit.synopsis);
+      if (!coverUrl && localHit.coverUrl) setCoverUrl(getSafeCoverUrl(localHit.coverUrl));
+      if (estimatedValue === '') {
+        setEstimatedValue(estimateMarketValue(localHit.title, localHit.console, condition));
+      }
+    }
+
     try {
-      const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
 
       const res = await fetch('/api/games/search-gemini', {
         method: 'POST',
@@ -272,11 +292,17 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       const data = await res.json();
       if (data.results && data.results.length > 0) {
         const best = data.results[0];
+        if (best.console && (!consoleName || consoleName === 'Nintendo Switch' || consoleName === 'Autre')) {
+          setConsoleName(best.console);
+        }
         if (!releaseYear && best.releaseYear) setReleaseYear(best.releaseYear);
         if (!publisher && best.publisher) setPublisher(best.publisher);
         if (!developer && best.developer) setDeveloper(best.developer);
         if (!genre && best.genre) setGenre(best.genre);
         if (!notes && best.synopsis) setNotes(best.synopsis);
+        if (estimatedValue === '') {
+          setEstimatedValue(estimateMarketValue(best.title, best.console || targetConsole, condition));
+        }
         if (best.coverUrl) {
           setCoverUrl(getSafeCoverUrl(best.coverUrl));
         } else {
@@ -292,6 +318,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
           type: 'success',
           text: `Détails et jaquette enrichis automatiquement pour "${best.title}" !`,
         });
+      } else if (localHit) {
+        setLookupMessage({
+          type: 'success',
+          text: `Détails enrichis pour "${localHit.title}" (${localHit.console}) !`,
+        });
       } else {
         setLookupMessage({
           type: 'warning',
@@ -299,10 +330,17 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         });
       }
     } catch {
-      setLookupMessage({
-        type: 'warning',
-        text: 'Recherche d\'enrichissement temporairement indisponible. Vous pouvez saisir les détails manuellement.',
-      });
+      if (localHit) {
+        setLookupMessage({
+          type: 'success',
+          text: `Détails enrichis pour "${localHit.title}" (${localHit.console}) !`,
+        });
+      } else {
+        setLookupMessage({
+          type: 'warning',
+          text: 'Recherche d\'enrichissement temporairement indisponible. Vous pouvez saisir les détails manuellement.',
+        });
+      }
     } finally {
       setIsSearching(false);
     }
@@ -312,10 +350,24 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     if (!title.trim()) return;
     setIsSearching(true);
     setLookupMessage(null);
+
+    const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
+
+    // Check catalog first
+    const localHit = findGameInCatalog(title, targetConsole) || findGameInCatalog(title);
+    if (localHit?.coverUrl) {
+      setCoverUrl(getSafeCoverUrl(localHit.coverUrl));
+      setLookupMessage({
+        type: 'success',
+        text: 'Jaquette officielle trouvée et chargée avec succès !',
+      });
+      setIsSearching(false);
+      return;
+    }
+
     try {
-      const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(title)}&console=${encodeURIComponent(targetConsole)}`, {
         signal: controller.signal,
@@ -922,7 +974,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                 <div className="flex gap-3 items-start">
                   <input
                     id="game-cover"
-                    type="url"
+                    type="text"
                     placeholder="URL de la jaquette ou cliquez sur Rechercher..."
                     value={coverUrl}
                     onChange={(e) => setCoverUrl(e.target.value)}

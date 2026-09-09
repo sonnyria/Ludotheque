@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { BARCODE_CATALOG } from './src/data/barcodeCatalog.js';
+import { BARCODE_CATALOG, lookupBarcodeInCatalog, findGameInCatalog } from './src/data/barcodeCatalog.js';
 
 dotenv.config();
 
@@ -46,175 +46,50 @@ function getAi(): GoogleGenAI | null {
   return aiClient;
 }
 
-// Known barcodes mapping for instant ultra-accurate fallback
-const KNOWN_BARCODES: Record<string, { title: string; console: string; releaseYear: number; publisher: string; developer: string; genre: string; synopsis: string; coverUrl?: string }> = {
-  '0045496420079': {
-    title: 'The Legend of Zelda: Breath of the Wild',
-    console: 'Nintendo Switch',
-    releaseYear: 2017,
-    publisher: 'Nintendo',
-    developer: 'Nintendo EPD',
-    genre: 'Action-Aventure',
-    synopsis: 'Entrez dans un monde de découverte, d\'exploration et d\'aventure dans The Legend of Zelda: Breath of the Wild.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fc%2Fc6%2FThe_Legend_of_Zelda_Breath_of_the_Wild.jpg',
-  },
-  '0045496590741': {
-    title: 'Super Mario Odyssey',
-    console: 'Nintendo Switch',
-    releaseYear: 2017,
-    publisher: 'Nintendo',
-    developer: 'Nintendo EPD',
-    genre: 'Plateforme 3D',
-    synopsis: 'Explorez d\'immenses royaumes 3D remplis de secrets et de surprises avec Mario et son nouvel allié Cappy.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F8%2F8d%2FSuper_Mario_Odyssey.jpg',
-  },
-  '0045496428457': {
-    title: 'Metroid Dread',
-    console: 'Nintendo Switch',
-    releaseYear: 2021,
-    publisher: 'Nintendo',
-    developer: 'MercurySteam',
-    genre: 'Metroidvania',
-    synopsis: 'Rejoignez la chasseuse de primes Samus Aran dans une lutte acharnée contre une menace mécanique mortelle.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Ff%2Ff7%2FMetroid_Dread_Banner.png',
-  },
-  '0711719541172': {
-    title: 'God of War Ragnarök',
-    console: 'PlayStation 5',
-    releaseYear: 2022,
-    publisher: 'Sony Interactive Entertainment',
-    developer: 'Santa Monica Studio',
-    genre: 'Action-Aventure',
-    synopsis: 'Kratos et Atreus doivent explorer chacun des neuf royaumes à la recherche de réponses pendant que les forces asgardiennes se préparent à la bataille.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fe%2Fee%2FGod_of_War_Ragnar%25C3%25B6k_cover.jpg',
-  },
-  '0711719398851': {
-    title: 'Demon\'s Souls',
-    console: 'PlayStation 5',
-    releaseYear: 2020,
-    publisher: 'Sony Interactive Entertainment',
-    developer: 'Bluepoint Games',
-    genre: 'Action-RPG',
-    synopsis: 'Découvrez l\'histoire troublante et les combats impitoyables du classique PlayStation de FromSoftware entièrement refait.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F1%2F11%2FDemons_Souls_remake_cover_art.jpg',
-  },
-  '0711719572657': {
-    title: 'Marvel\'s Spider-Man 2',
-    console: 'PlayStation 5',
-    releaseYear: 2023,
-    publisher: 'Sony Interactive Entertainment',
-    developer: 'Insomniac Games',
-    genre: 'Action-Aventure',
-    synopsis: 'Peter Parker et Miles Morales reviennent pour une toute nouvelle aventure palpitante face à Venom et Kraven.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F0%2F0f%2FSpiderMan2PS5BoxArt.jpeg',
-  },
-  '0889842880770': {
-    title: 'Forza Horizon 5',
-    console: 'Xbox Series X|S',
-    releaseYear: 2021,
-    publisher: 'Xbox Game Studios',
-    developer: 'Playground Games',
-    genre: 'Course automobile',
-    synopsis: 'Votre aventure Horizon ultime vous attend ! Explorez les paysages vibrants et en constante évolution du Mexique.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F8%2F86%2FForza_Horizon_5_cover_art.jpg',
-  },
-  '0889842691512': {
-    title: 'Halo Infinite',
-    console: 'Xbox Series X|S',
-    releaseYear: 2021,
-    publisher: 'Xbox Game Studios',
-    developer: '343 Industries',
-    genre: 'FPS',
-    synopsis: 'Le Master Chief revient dans la campagne la plus vaste et la plus ambitieuse de l\'histoire de Halo.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F1%2F14%2FHalo_Infinite.png',
-  },
-  '3391891999908': {
-    title: 'Elden Ring',
-    console: 'PlayStation 5',
-    releaseYear: 2022,
-    publisher: 'Bandai Namco Entertainment',
-    developer: 'FromSoftware',
-    genre: 'Action-RPG',
-    synopsis: 'Le nouveau jeu de rôle et d\'action fantastique développé par FromSoftware et scénarisé avec George R. R. Martin.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fb%2Fb9%2FElden_Ring_Box_art.jpg',
-  },
-  '5026555424233': {
-    title: 'Red Dead Redemption 2',
-    console: 'PlayStation 4',
-    releaseYear: 2018,
-    publisher: 'Rockstar Games',
-    developer: 'Rockstar Studios',
-    genre: 'Action-Aventure / Western',
-    synopsis: 'Amérique, 1899. L\'ère de l\'Ouest sauvage touche à sa fin. Arthur Morgan et la bande de Dutch van der Linde sont traqués.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F4%2F44%2FRed_Dead_Redemption_II.jpg',
-  },
-  '0045496830588': {
-    title: 'Chrono Trigger',
-    console: 'Super Nintendo (SNES)',
-    releaseYear: 1995,
-    publisher: 'Square',
-    developer: 'Square',
-    genre: 'JRPG',
-    synopsis: 'Une épopée inoubliable à travers les époques pour sauver le destin de la planète.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fa%2Fa7%2FChrono_Trigger.jpg',
-  },
-  '0045496830021': {
-    title: 'Super Mario World',
-    console: 'Super Nintendo (SNES)',
-    releaseYear: 1990,
-    publisher: 'Nintendo',
-    developer: 'Nintendo EAD',
-    genre: 'Plateforme',
-    synopsis: 'Mario et Luigi partent explorer Dinosaur Land pour sauver la Princesse Peach de Bowser.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F3%2F32%2FSuper_Mario_World_Coverart.png',
-  },
-  '0045496590420': {
-    title: 'Mario Kart 8 Deluxe',
-    console: 'Nintendo Switch',
-    releaseYear: 2017,
-    publisher: 'Nintendo',
-    developer: 'Nintendo EPD',
-    genre: 'Course arcade',
-    synopsis: 'Faites la course et affrontez vos amis dans la version ultime de Mario Kart 8 sur Nintendo Switch.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Fb%2Fba%2FMario_Kart_8_Box_Art.jpg',
-  },
-  '0045496596439': {
-    title: 'Animal Crossing: New Horizons',
-    console: 'Nintendo Switch',
-    releaseYear: 2020,
-    publisher: 'Nintendo',
-    developer: 'Nintendo EPD',
-    genre: 'Simulation de vie',
-    synopsis: 'Créez votre propre paradis sur une île déserte vierge avec Tom Nook.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F1%2F1f%2FAnimal_Crossing_New_Horizons.jpg',
-  },
-  '3307216262435': {
-    title: "Assassin's Creed Valhalla",
-    console: 'PlayStation 4',
-    releaseYear: 2020,
-    publisher: 'Ubisoft',
-    developer: 'Ubisoft Montreal',
-    genre: 'Action-RPG',
-    synopsis: 'Incarnez Eivor, un redoutable chef viking dont les récits de combat ont traversé les âges.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2Ff%2Ff5%2FAssassins_Creed_Valhalla_cover.jpg',
-  },
-  '0711719541189': {
-    title: 'The Last of Us Part I',
-    console: 'PlayStation 5',
-    releaseYear: 2022,
-    publisher: 'Sony Interactive Entertainment',
-    developer: 'Naughty Dog',
-    genre: 'Action-Aventure / Survie',
-    synopsis: 'Redécouvrez l\'aventure poignante de Joel et Ellie à travers une Amérique post-pandémique dévastée.',
-    coverUrl: '/api/covers/proxy?url=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fen%2F4%2F46%2FThe_Last_of_Us_Part_I_cover.png',
-  },
-};
+// Circuit breaker for Gemini to prevent repeated stalls or errors when quota/auth/dunning is unavailable
+let geminiDisabledUntil = 0;
+let geminiPermanentlyDisabled = false;
+
+function isGeminiAvailable(): boolean {
+  if (geminiPermanentlyDisabled) return false;
+  if (Date.now() < geminiDisabledUntil) return false;
+  return Boolean(process.env.GEMINI_API_KEY);
+}
+
+function markGeminiFailure(err?: any) {
+  const errMsg = typeof err === 'string' ? err : (err?.message || JSON.stringify(err || ''));
+  if (/dunning|PERMISSION_DENIED|403|billing|API_KEY_INVALID|quota/i.test(errMsg)) {
+    geminiPermanentlyDisabled = true;
+  } else {
+    geminiDisabledUntil = Date.now() + 15 * 60 * 1000;
+  }
+}
+
+// Silent startup probe: check if Gemini API is available on this environment
+(async () => {
+  if (!process.env.GEMINI_API_KEY) {
+    geminiPermanentlyDisabled = true;
+    return;
+  }
+  try {
+    const ai = getAi();
+    if (ai) {
+      await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: 'ping',
+        }),
+        3000,
+        'timeout'
+      );
+    }
+  } catch (err: any) {
+    markGeminiFailure(err);
+  }
+})();
 
 // Combined barcodes database (internal + catalog)
-const ALL_BARCODES: Record<string, { title: string; console: string; releaseYear: number; publisher: string; developer: string; genre: string; synopsis: string; coverUrl?: string }> = {
-  ...BARCODE_CATALOG,
-  ...KNOWN_BARCODES,
-};
+const ALL_BARCODES = BARCODE_CATALOG;
 
 // Clean barcode string
 function normalizeBarcode(code: string): string {
@@ -230,25 +105,25 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackMsg: str
   ]);
 }
 
-// Fast box art cover search via Wikipedia & local catalog
+// Fast box art cover search via Steam, Wikipedia & local catalog in parallel (< 600ms)
 async function findOfficialCover(title: string, consoleName: string = ''): Promise<string | null> {
   if (!title || !title.trim()) return null;
 
-  const normalizedTitle = title.trim().toLowerCase();
+  const cleanTitle = title.replace(/\s*\(.*?\)/g, '').trim();
 
-  // 1. Direct match in local catalog
-  for (const item of Object.values(ALL_BARCODES)) {
-    if (item.title.toLowerCase() === normalizedTitle && item.coverUrl) {
-      return item.coverUrl;
-    }
+  // 1. Direct match in local catalog (0ms)
+  const localMatch = findGameInCatalog(cleanTitle, consoleName);
+  if (localMatch?.coverUrl) {
+    return localMatch.coverUrl;
   }
 
-  // Helper to query Wikipedia pageimages with search generator
-  const searchWikiImage = async (wikiDomain: string, searchQuery: string, timeoutMs: number = 3000): Promise<string | null> => {
+  // 2. Direct Wikipedia title lookup (fastest & most accurate: e.g. "Titanfall (video game)", "Titanfall")
+  const searchWikiDirect = async (domain: string): Promise<string | null> => {
     try {
-      const url = `https://${wikiDomain}/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(searchQuery)}&gsrlimit=1&prop=pageimages|images&pilicense=any&pithumbsize=600&format=json`;
+      const titles = `${encodeURIComponent(cleanTitle + ' (video game)')}|${encodeURIComponent(cleanTitle + ' (jeu vidéo)')}|${encodeURIComponent(cleanTitle)}`;
+      const url = `https://${domain}/w/api.php?action=query&titles=${titles}&prop=pageimages&pilicense=any&pithumbsize=600&redirects=1&format=json`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const timeout = setTimeout(() => controller.abort(), 2500);
       const res = await fetch(url, {
         signal: controller.signal,
         headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
@@ -256,39 +131,11 @@ async function findOfficialCover(title: string, consoleName: string = ''): Promi
       clearTimeout(timeout);
       if (!res.ok) return null;
       const data: any = await res.json();
-      const pages = data?.query?.pages;
-      if (!pages) return null;
-
-      const page: any = Object.values(pages)[0];
-      if (page?.thumbnail?.source && typeof page.thumbnail.source === 'string') {
-        return `/api/covers/proxy?url=${encodeURIComponent(page.thumbnail.source)}`;
-      }
-
-      // If no thumbnail directly found, check images list for Box art or Cover
-      const imageFiles: Array<{ title: string }> = page?.images || [];
-      const boxArt = imageFiles.find(img => 
-        /box\s?art|cover|jacket|jaquette/i.test(img.title) && !/logo|icon|symbol|flag/i.test(img.title)
-      );
-      if (boxArt) {
-        const infoUrl = `https://${wikiDomain}/w/api.php?action=query&titles=${encodeURIComponent(boxArt.title)}&prop=imageinfo&iiprop=url&iiurlwidth=600&format=json`;
-        const infoController = new AbortController();
-        const infoTimeout = setTimeout(() => infoController.abort(), 2000);
-        const infoRes = await fetch(infoUrl, {
-          signal: infoController.signal,
-          headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
-        });
-        clearTimeout(infoTimeout);
-        if (infoRes.ok) {
-          const infoData: any = await infoRes.json();
-          const infoPages = infoData?.query?.pages;
-          if (infoPages) {
-            const imgPage: any = Object.values(infoPages)[0];
-            const imgUrl = imgPage?.imageinfo?.[0]?.thumburl || imgPage?.imageinfo?.[0]?.url;
-            if (imgUrl && typeof imgUrl === 'string') {
-              return `/api/covers/proxy?url=${encodeURIComponent(imgUrl)}`;
-            }
-          }
-        }
+      const pages: any[] = Object.values(data?.query?.pages || {});
+      const best = pages.find(p => p?.thumbnail?.source && /video game|jeu vid/i.test(p.title || '')) ||
+                   pages.find(p => p?.thumbnail?.source);
+      if (best?.thumbnail?.source) {
+        return `/api/covers/proxy?url=${encodeURIComponent(best.thumbnail.source)}`;
       }
     } catch {
       // ignore
@@ -296,28 +143,68 @@ async function findOfficialCover(title: string, consoleName: string = ''): Promi
     return null;
   };
 
-  // Try queries with clean timeout
+  // 3. Steam API with sequel mismatch guard
+  const searchSteam = async (): Promise<string | null> => {
+    try {
+      const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(cleanTitle)}&l=french&cc=FR`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const app = data?.items?.[0];
+      if (app?.id && app?.name) {
+        const queryHasDigit = /\b(\d+|ii|iii|iv|v|vi)\b/i.test(cleanTitle);
+        const appHasDigit = /\b([2-9]|\d{2,}|ii|iii|iv|v|vi)\b/i.test(app.name);
+        if (!queryHasDigit && appHasDigit) {
+          return null;
+        }
+        const cover = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/library_600x900.jpg`;
+        const headRes = await fetch(cover, { method: 'HEAD' });
+        if (headRes.ok) return cover;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const searchWikiSearch = async (domain: string, query: string): Promise<string | null> => {
+    try {
+      const url = `https://${domain}/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=1&prop=pageimages&pilicense=any&pithumbsize=600&format=json`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const page: any = Object.values(data?.query?.pages || {})[0];
+      if (page?.thumbnail?.source && typeof page.thumbnail.source === 'string') {
+        return `/api/covers/proxy?url=${encodeURIComponent(page.thumbnail.source)}`;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const queries = [
+    searchWikiDirect('en.wikipedia.org'),
+    searchWikiDirect('fr.wikipedia.org'),
+    searchSteam(),
+    searchWikiSearch('en.wikipedia.org', `${cleanTitle} video game`),
+    searchWikiSearch('fr.wikipedia.org', `${cleanTitle} jeu vidéo`),
+    searchWikiSearch('en.wikipedia.org', cleanTitle),
+  ];
+
   try {
-    const cleanTitle = title.replace(/\s*\(.*?\)/g, '').trim();
-    const queryWithConsole = consoleName && consoleName !== 'Autre' 
-      ? `${cleanTitle} ${consoleName} video game` 
-      : `${cleanTitle} video game`;
-    
-    // 1: English Wikipedia with platform
-    let cover = await searchWikiImage('en.wikipedia.org', queryWithConsole, 3000);
-    if (cover) return cover;
-
-    // 2: English Wikipedia with video game
-    cover = await searchWikiImage('en.wikipedia.org', `${cleanTitle} video game`, 2500);
-    if (cover) return cover;
-
-    // 3: French Wikipedia with jeu vidéo
-    cover = await searchWikiImage('fr.wikipedia.org', `${cleanTitle} jeu vidéo`, 2500);
-    if (cover) return cover;
-
-    // 4: Pure title on English Wikipedia
-    cover = await searchWikiImage('en.wikipedia.org', cleanTitle, 2000);
-    if (cover) return cover;
+    const results = await Promise.all(queries);
+    const valid = results.find(r => typeof r === 'string' && r.length > 0);
+    if (valid) return valid;
   } catch {
     // ignore
   }
@@ -325,132 +212,174 @@ async function findOfficialCover(title: string, consoleName: string = ''): Promi
   return null;
 }
 
-// Fallback search engine using Wikipedia video game APIs (works 100% offline & without Gemini)
+// Fallback search engine using Wikipedia video game APIs & Steam (ultra fast & parallel)
 async function searchWikipediaGames(query: string, preferredConsole?: string): Promise<any[]> {
   if (!query || !query.trim()) return [];
   const cleanQ = query.trim();
-  const searchUrls = [
-    `https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ + ' jeu vidéo')}&srlimit=4&format=json`,
-    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ + ' video game')}&srlimit=4&format=json`
-  ];
-
-  const results: any[] = [];
   const seenTitles = new Set<string>();
+  const results: any[] = [];
 
-  for (const sUrl of searchUrls) {
-    if (results.length >= 3) break;
+  // 1. Instant check in local catalog (0ms)
+  const localMatch = findGameInCatalog(cleanQ, preferredConsole);
+  if (localMatch) {
+    seenTitles.add(localMatch.title.toLowerCase());
+    results.push(localMatch);
+  }
+
+  // 2. Parallel search across Steam & Wikipedia
+  const fetchWikiDirect = async (domain: string) => {
     try {
+      const titles = `${encodeURIComponent(cleanQ + ' (video game)')}|${encodeURIComponent(cleanQ + ' (jeu vidéo)')}|${encodeURIComponent(cleanQ)}`;
+      const url = `https://${domain}/w/api.php?action=query&titles=${titles}&prop=extracts|pageimages&exintro=1&explaintext=1&pilicense=any&pithumbsize=600&redirects=1&format=json`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500);
+      const timeout = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
+      });
+      clearTimeout(timeout);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      return Object.values(data?.query?.pages || {});
+    } catch {
+      return [];
+    }
+  };
+
+  const fetchWikiSearch = async (domain: string, searchSuffix: string) => {
+    try {
+      const sUrl = `https://${domain}/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(cleanQ + searchSuffix)}&gsrlimit=3&prop=extracts|pageimages&exintro=1&explaintext=1&pilicense=any&pithumbsize=600&redirects=1&format=json`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
       const res = await fetch(sUrl, {
         signal: controller.signal,
         headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
       });
       clearTimeout(timeout);
-      if (!res.ok) continue;
-
+      if (!res.ok) return [];
       const data: any = await res.json();
-      const hits = data?.query?.search || [];
-
-      for (const hit of hits) {
-        if (results.length >= 3) break;
-        const rawTitle: string = hit.title;
-        if (/liste de|list of|chronologie|franchise|série de/i.test(rawTitle)) continue;
-
-        const normalized = rawTitle.replace(/\s*\(.*?\)/g, '').trim().toLowerCase();
-        if (seenTitles.has(normalized)) continue;
-        seenTitles.add(normalized);
-
-        const isFr = sUrl.includes('fr.wikipedia');
-        const domain = isFr ? 'fr.wikipedia.org' : 'en.wikipedia.org';
-        const dUrl = `https://${domain}/w/api.php?action=query&titles=${encodeURIComponent(rawTitle)}&prop=extracts|pageimages&exintro=1&explaintext=1&pithumbsize=600&redirects=1&format=json`;
-        
-        const dController = new AbortController();
-        const dTimeout = setTimeout(() => dController.abort(), 3000);
-        const dRes = await fetch(dUrl, {
-          signal: dController.signal,
-          headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
-        });
-        clearTimeout(dTimeout);
-        if (!dRes.ok) continue;
-
-        const dData: any = await dRes.json();
-        const page: any = Object.values(dData?.query?.pages || {})[0];
-        if (!page) continue;
-
-        const extract: string = page.extract || '';
-        const yearMatch = extract.match(/\b(19\d\d|20[0-3]\d)\b/);
-        const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : undefined;
-
-        let detectedConsole = preferredConsole || 'Autre';
-        if (/nintendo switch/i.test(extract)) detectedConsole = 'Nintendo Switch';
-        else if (/playstation 5|ps5/i.test(extract)) detectedConsole = 'PlayStation 5';
-        else if (/playstation 4|ps4/i.test(extract)) detectedConsole = 'PlayStation 4';
-        else if (/playstation 3|ps3/i.test(extract)) detectedConsole = 'PlayStation 3';
-        else if (/playstation 2|ps2/i.test(extract)) detectedConsole = 'PlayStation 2';
-        else if (/playstation 1|ps1|psone/i.test(extract)) detectedConsole = 'PlayStation (PS1)';
-        else if (/xbox series/i.test(extract)) detectedConsole = 'Xbox Series X|S';
-        else if (/xbox one/i.test(extract)) detectedConsole = 'Xbox One';
-        else if (/xbox 360/i.test(extract)) detectedConsole = 'Xbox 360';
-        else if (/super nintendo|snes/i.test(extract)) detectedConsole = 'Super Nintendo (SNES)';
-        else if (/nintendo 64|n64/i.test(extract)) detectedConsole = 'Nintendo 64';
-        else if (/gamecube/i.test(extract)) detectedConsole = 'Nintendo GameCube';
-        else if (/game boy advance|gba/i.test(extract)) detectedConsole = 'Game Boy / Advance';
-        else if (/nintendo (3ds|ds)/i.test(extract)) detectedConsole = 'Nintendo 3DS / DS';
-
-        const devMatch = extract.match(/(?:d[eé]velopp[eé] par|developed by)\s+([^,\.\(\n]+)/i);
-        const pubMatch = extract.match(/(?:[eé]dit[eé] par|published by)\s+([^,\.\(\n]+)/i);
-
-        let detectedGenre = 'Action-Aventure';
-        if (/jeu de rôle|rpg|action-rpg/i.test(extract)) detectedGenre = 'Action-RPG';
-        else if (/plate-forme|plateforme|platform/i.test(extract)) detectedGenre = 'Plateforme';
-        else if (/course|racing/i.test(extract)) detectedGenre = 'Course automobile';
-        else if (/tir à la première personne|fps/i.test(extract)) detectedGenre = 'FPS / Tir';
-        else if (/combat|fighting/i.test(extract)) detectedGenre = 'Combat';
-        else if (/survival horror|survie/i.test(extract)) detectedGenre = 'Survival horror';
-        else if (/sport|football|basket/i.test(extract)) detectedGenre = 'Sport';
-
-        const displayTitle = rawTitle
-          .replace(/\s*\(jeu vid[eé]o.*?\)/i, '')
-          .replace(/\s*\(video game.*?\)/i, '')
-          .replace(/\s*\(s[eé]rie de jeux.*?\)/i, '')
-          .trim();
-
-        let coverUrl: string | undefined = undefined;
-        try {
-          const found = await findOfficialCover(displayTitle, detectedConsole);
-          if (found) coverUrl = found;
-        } catch {
-          // ignore
-        }
-
-        results.push({
-          title: displayTitle,
-          console: detectedConsole,
-          releaseYear,
-          developer: devMatch ? devMatch[1].trim() : undefined,
-          publisher: pubMatch ? pubMatch[1].trim() : undefined,
-          genre: detectedGenre,
-          synopsis: extract.length > 220 ? extract.slice(0, 220).trim() + '...' : extract,
-          coverUrl
-        });
-      }
+      return Object.values(data?.query?.pages || {});
     } catch {
-      // Continue
+      return [];
     }
+  };
+
+  const fetchSteam = async () => {
+    try {
+      const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(cleanQ)}&l=french&cc=FR`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) return [];
+      const data: any = await res.json();
+      return (data?.items || []).slice(0, 3);
+    } catch {
+      return [];
+    }
+  };
+
+  try {
+    const [directEn, directFr, frPages, enPages, steamApps] = await Promise.all([
+      fetchWikiDirect('en.wikipedia.org'),
+      fetchWikiDirect('fr.wikipedia.org'),
+      fetchWikiSearch('fr.wikipedia.org', ' jeu vidéo'),
+      fetchWikiSearch('en.wikipedia.org', ' video game'),
+      fetchSteam()
+    ]);
+
+    // Process Wikipedia pages first (richer data with developers, publishers, dates)
+    const allPages = [...directEn, ...directFr, ...frPages, ...enPages];
+    for (const page of allPages as any[]) {
+      if (results.length >= 5) break;
+      const rawTitle = page.title || '';
+      if (!rawTitle || page.missing !== undefined) continue;
+      if (/liste de|list of|chronologie|franchise|série de/i.test(rawTitle)) continue;
+      const norm = rawTitle.replace(/\s*\(.*?\)/g, '').trim().toLowerCase();
+      if (seenTitles.has(norm)) continue;
+      seenTitles.add(norm);
+
+      const extract: string = page.extract || '';
+      const yearMatch = extract.match(/\b(19\d\d|20[0-3]\d)\b/);
+      const releaseYear = yearMatch ? parseInt(yearMatch[1], 10) : undefined;
+
+      let detectedConsole = preferredConsole || 'Autre';
+      if (/nintendo switch/i.test(extract)) detectedConsole = 'Nintendo Switch';
+      else if (/playstation 5|ps5/i.test(extract)) detectedConsole = 'PlayStation 5';
+      else if (/playstation 4|ps4/i.test(extract)) detectedConsole = 'PlayStation 4';
+      else if (/super nintendo|snes/i.test(extract)) detectedConsole = 'Super Nintendo (SNES)';
+      else if (/nintendo 64|n64/i.test(extract)) detectedConsole = 'Nintendo 64';
+      else if (/game boy/i.test(extract)) detectedConsole = 'Game Boy / Advance';
+      else if (/xbox one/i.test(extract)) detectedConsole = 'Xbox One';
+      else if (/xbox 360/i.test(extract)) detectedConsole = 'Xbox 360';
+      else if (/xbox/i.test(extract)) detectedConsole = 'Xbox Series X|S';
+
+      const devMatch = extract.match(/(?:d[eé]velopp[eé] par|developed by)\s+([^,\.\(\n]+)/i);
+      const pubMatch = extract.match(/(?:[eé]dit[eé] par|published by)\s+([^,\.\(\n]+)/i);
+
+      let detectedGenre = 'Action-Aventure';
+      if (/jeu de rôle|rpg/i.test(extract)) detectedGenre = 'Action-RPG';
+      else if (/plate-forme|plateforme/i.test(extract)) detectedGenre = 'Plateforme';
+      else if (/course|racing/i.test(extract)) detectedGenre = 'Course';
+      else if (/combat|fighting/i.test(extract)) detectedGenre = 'Combat';
+      else if (/fps|tir|first-person shooter/i.test(extract)) detectedGenre = 'Tir / FPS';
+
+      const displayTitle = rawTitle
+        .replace(/\s*\(jeu vid[eé]o.*?\)/i, '')
+        .replace(/\s*\(video game.*?\)/i, '')
+        .trim();
+
+      const coverUrl = page.thumbnail?.source 
+        ? `/api/covers/proxy?url=${encodeURIComponent(page.thumbnail.source)}`
+        : undefined;
+
+      results.push({
+        title: displayTitle,
+        console: detectedConsole,
+        releaseYear,
+        developer: devMatch ? devMatch[1].trim() : undefined,
+        publisher: pubMatch ? pubMatch[1].trim() : undefined,
+        genre: detectedGenre,
+        synopsis: extract.length > 200 ? extract.slice(0, 200).trim() + '...' : extract,
+        coverUrl
+      });
+    }
+
+    // Process Steam apps (with sequel guard)
+    const queryHasDigit = /\b(\d+|ii|iii|iv|v|vi)\b/i.test(cleanQ);
+    for (const app of steamApps as any[]) {
+      if (results.length >= 5) break;
+      const t = (app.name || '').replace(/[®™]/g, '').trim();
+      const norm = t.toLowerCase().trim();
+      if (!norm || seenTitles.has(norm)) continue;
+
+      // Prevent mismatching sequels (e.g. Titanfall 2 when user searched Titanfall)
+      const appHasDigit = /\b([2-9]|\d{2,}|ii|iii|iv|v|vi)\b/i.test(t);
+      if (!queryHasDigit && appHasDigit) {
+        continue;
+      }
+
+      seenTitles.add(norm);
+      results.push({
+        title: t,
+        console: preferredConsole || 'PC',
+        genre: 'Action / Aventure',
+        synopsis: `Jeu vidéo officiel (${t}).`,
+        coverUrl: `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/library_600x900.jpg`,
+      });
+    }
+  } catch {
+    // ignore
   }
 
-  // Also check local barcode catalog for title matches
-  if (results.length < 3) {
-    const qLower = cleanQ.toLowerCase();
-    for (const item of Object.values(ALL_BARCODES)) {
-      if (results.length >= 3) break;
-      if (item.title.toLowerCase().includes(qLower) && !seenTitles.has(item.title.toLowerCase())) {
-        seenTitles.add(item.title.toLowerCase());
-        results.push(item);
-      }
-    }
-  }
+  // Sort: exact title match first
+  results.sort((a, b) => {
+    const aExact = a.title.toLowerCase() === cleanQ.toLowerCase();
+    const bExact = b.title.toLowerCase() === cleanQ.toLowerCase();
+    if (aExact && !bExact) return -1;
+    if (!aExact && bExact) return 1;
+    return 0;
+  });
 
   return results;
 }
@@ -539,8 +468,7 @@ app.get('/api/games/find-cover', async (req, res) => {
 
     const coverUrl = await findOfficialCover(title, consoleName);
     return res.json({ coverUrl: coverUrl || null, title, console: consoleName });
-  } catch (err: any) {
-    console.warn('find-cover error:', err?.message || err);
+  } catch {
     return res.json({ coverUrl: null, title: req.query.title || '', console: req.query.console || '' });
   }
 });
@@ -558,14 +486,14 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       return res.status(400).json({ error: 'Code-barres non valide (chiffres attendus).' });
     }
 
-    // 1. Check local catalog for instant zero-latency match
-    if (ALL_BARCODES[cleanCode]) {
-      const match = ALL_BARCODES[cleanCode];
+    // 1. Check local catalog first for instant zero-latency match (UPC/EAN/fuzzy)
+    const catalogMatch = lookupBarcodeInCatalog(cleanCode);
+    if (catalogMatch) {
       return res.json({
         found: true,
         source: 'database',
         game: {
-          ...match,
+          ...catalogMatch,
           barcode: cleanCode,
           confidence: 'high'
         }
@@ -607,10 +535,10 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       }
     }
 
-    // 3. Try Open Products Facts API
+    // 3. Try Open Products Facts API with 2s timeout
     try {
       const opfController = new AbortController();
-      const opfTimeout = setTimeout(() => opfController.abort(), 2500);
+      const opfTimeout = setTimeout(() => opfController.abort(), 2000);
       const opfRes = await fetch(`https://world.openproductsfacts.org/api/v0/product/${cleanCode}.json`, {
         signal: opfController.signal,
         headers: { 'User-Agent': 'GameVaultApp/1.0 (contact@gamecollection.local)' }
@@ -648,11 +576,12 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       // ignore
     }
 
-    // 4. Try Gemini AI lookup if available
-    const ai = getAi();
-    if (ai) {
-      try {
-        const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo commerciaux pour consoles.
+    // 4. Try Gemini AI lookup if available & circuit-breaker is open
+    if (isGeminiAvailable()) {
+      const ai = getAi();
+      if (ai) {
+        try {
+          const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo commerciaux pour consoles.
 Le code-barres EAN/UPC suivant a été scanné sur la boîte d'un jeu vidéo physique : "${cleanCode}".
 Identifie avec la plus grande précision le jeu vidéo exact correspondant :
 - title: le titre officiel complet du jeu vidéo
@@ -664,61 +593,62 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
 - synopsis: court résumé en 1-2 phrases en français
 - confidence: 'high' | 'medium' | 'low'`;
 
-        const aiResponse = await withTimeout(
-          ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  console: { type: Type.STRING },
-                  releaseYear: { type: Type.INTEGER },
-                  publisher: { type: Type.STRING },
-                  developer: { type: Type.STRING },
-                  genre: { type: Type.STRING },
-                  synopsis: { type: Type.STRING },
-                  confidence: { type: Type.STRING }
-                },
-                required: ['title', 'console', 'confidence']
+          const aiResponse = await withTimeout(
+            ai.models.generateContent({
+              model: 'gemini-3.8-flash',
+              contents: prompt,
+              config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    console: { type: Type.STRING },
+                    releaseYear: { type: Type.INTEGER },
+                    publisher: { type: Type.STRING },
+                    developer: { type: Type.STRING },
+                    genre: { type: Type.STRING },
+                    synopsis: { type: Type.STRING },
+                    confidence: { type: Type.STRING }
+                  },
+                  required: ['title', 'console', 'confidence']
+                }
               }
-            }
-          }),
-          5000,
-          'Délai de recherche dépassé.'
-        );
+            }),
+            3500,
+            'Délai de recherche dépassé.'
+          );
 
-        const parsed = JSON.parse(aiResponse.text || '{}');
-        if (parsed.title && parsed.title.trim() && parsed.confidence !== 'low') {
-          let autoCoverUrl: string | undefined = undefined;
-          try {
-            const foundCover = await findOfficialCover(parsed.title, parsed.console || '');
-            if (foundCover) autoCoverUrl = foundCover;
-          } catch {
-            // ignore
+          const parsed = JSON.parse(aiResponse.text || '{}');
+          if (parsed.title && parsed.title.trim() && parsed.confidence !== 'low') {
+            let autoCoverUrl: string | undefined = undefined;
+            try {
+              const foundCover = await findOfficialCover(parsed.title, parsed.console || '');
+              if (foundCover) autoCoverUrl = foundCover;
+            } catch {
+              // ignore
+            }
+
+            return res.json({
+              found: true,
+              source: 'gemini',
+              game: {
+                title: parsed.title,
+                console: parsed.console || 'Autre',
+                releaseYear: parsed.releaseYear || undefined,
+                publisher: parsed.publisher || undefined,
+                developer: parsed.developer || undefined,
+                genre: parsed.genre || undefined,
+                synopsis: parsed.synopsis || undefined,
+                barcode: cleanCode,
+                confidence: parsed.confidence || 'medium',
+                coverUrl: autoCoverUrl,
+              }
+            });
           }
-
-          return res.json({
-            found: true,
-            source: 'gemini',
-            game: {
-              title: parsed.title,
-              console: parsed.console || 'Autre',
-              releaseYear: parsed.releaseYear || undefined,
-              publisher: parsed.publisher || undefined,
-              developer: parsed.developer || undefined,
-              genre: parsed.genre || undefined,
-              synopsis: parsed.synopsis || undefined,
-              barcode: cleanCode,
-              confidence: parsed.confidence || 'medium',
-              coverUrl: autoCoverUrl,
-            }
-          });
+        } catch (aiErr: any) {
+          markGeminiFailure(aiErr);
         }
-      } catch (aiErr: any) {
-        console.warn('Gemini lookup error (handled gracefully):', aiErr?.message || aiErr);
       }
     }
 
@@ -728,8 +658,7 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
       barcode: cleanCode,
       message: 'Code-barres scanné avec succès ! Complétez le nom du jeu ci-dessous pour lancer la recherche automatique.'
     });
-  } catch (err: any) {
-    console.error('Erreur lookup-barcode:', err);
+  } catch {
     return res.json({
       found: false,
       barcode: req.body?.barcode || '',
@@ -750,11 +679,18 @@ app.post('/api/games/search-gemini', async (req, res) => {
     let results: any[] = [];
     let aiSuccess = false;
 
-    // 1. Try Gemini AI if configured
-    const ai = getAi();
-    if (ai) {
-      try {
-        const prompt = `Tu es une encyclopédie de jeux vidéo. L'utilisateur veut ajouter un jeu à sa collection personnelle :
+    // 1. First check local catalog for instant zero-latency match
+    const localMatch = findGameInCatalog(query, preferredConsole);
+    if (localMatch) {
+      results.push(localMatch);
+    }
+
+    // 2. Try Gemini AI if available & circuit-breaker is open
+    if (isGeminiAvailable()) {
+      const ai = getAi();
+      if (ai) {
+        try {
+          const prompt = `Tu es une encyclopédie de jeux vidéo. L'utilisateur veut ajouter un jeu à sa collection personnelle :
 Recherche ou nom : "${query}"
 ${preferredConsole ? `Console préférée : "${preferredConsole}"` : ''}
 
@@ -767,51 +703,58 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
 - genre: genre en français
 - synopsis: court résumé en français (1 ou 2 phrases)`;
 
-        const aiResponse = await withTimeout(
-          ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    title: { type: Type.STRING },
-                    console: { type: Type.STRING },
-                    releaseYear: { type: Type.INTEGER },
-                    publisher: { type: Type.STRING },
-                    developer: { type: Type.STRING },
-                    genre: { type: Type.STRING },
-                    synopsis: { type: Type.STRING }
-                  },
-                  required: ['title', 'console']
+          const aiResponse = await withTimeout(
+            ai.models.generateContent({
+              model: 'gemini-3.8-flash',
+              contents: prompt,
+              config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      console: { type: Type.STRING },
+                      releaseYear: { type: Type.INTEGER },
+                      publisher: { type: Type.STRING },
+                      developer: { type: Type.STRING },
+                      genre: { type: Type.STRING },
+                      synopsis: { type: Type.STRING }
+                    },
+                    required: ['title', 'console']
+                  }
                 }
               }
-            }
-          }),
-          5000,
-          'Délai de recherche dépassé.'
-        );
+            }),
+            3500,
+            'Délai de recherche dépassé.'
+          );
 
-        results = JSON.parse(aiResponse.text || '[]');
-        if (Array.isArray(results) && results.length > 0) {
-          aiSuccess = true;
+          const aiList = JSON.parse(aiResponse.text || '[]');
+          if (Array.isArray(aiList) && aiList.length > 0) {
+            results = aiList;
+            aiSuccess = true;
+          }
+        } catch (aiErr: any) {
+          markGeminiFailure(aiErr);
         }
-      } catch (aiErr: any) {
-        console.warn('search-gemini AI error, activating Wikipedia game fallback:', aiErr?.message || aiErr);
       }
     }
 
-    // 2. If Gemini was unavailable or yielded no results, fallback to Wikipedia game search!
+    // 3. Fallback to fast Wikipedia / Steam search if Gemini was unavailable or yielded 0
     if (!aiSuccess || results.length === 0) {
-      results = await searchWikipediaGames(query, preferredConsole);
+      const fallbackResults = await searchWikipediaGames(query, preferredConsole);
+      for (const fr of fallbackResults) {
+        if (!results.some(r => r.title.toLowerCase() === fr.title.toLowerCase())) {
+          results.push(fr);
+        }
+      }
     }
 
-    // 3. Attach covers if found
+    // 4. Attach covers if missing
     const enrichedResults = await Promise.all(
-      results.map(async (r: any) => {
+      results.slice(0, 4).map(async (r: any) => {
         try {
           if (r.coverUrl) return r;
           const cover = await findOfficialCover(r.title, r.console);
@@ -823,15 +766,14 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
     );
 
     return res.json({ results: enrichedResults });
-  } catch (err: any) {
-    console.error('Erreur search-gemini, attempting Wikipedia search fallback:', err);
+  } catch {
     try {
       const wikiResults = await searchWikipediaGames(req.body?.query || '', req.body?.console);
       return res.json({ results: wikiResults });
     } catch {
       return res.json({
         results: [],
-        error: 'Erreur lors de la recherche: ' + (err.message || String(err))
+        error: 'Aucun résultat trouvé.'
       });
     }
   }

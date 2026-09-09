@@ -89,7 +89,17 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'persona 5 royal': 30,
   'spider-man': 16,
 
-  // Xbox Series X|S & Xbox One
+  // Xbox Series X|S, Xbox One & Xbox 360
+  'titanfall': 8,
+  'titanfall 2': 10,
+  'halo the master chief collection': 16,
+  'halo master chief collection': 16,
+  'halo 5: guardians': 10,
+  'halo 5': 10,
+  'sunset overdrive': 10,
+  'quantum break': 12,
+  'forza horizon 3': 20,
+  'forza horizon 4': 18,
   'forza horizon 5': 28,
   'halo infinite': 20,
   'starfield': 26,
