@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins } from 'lucide-react';
+import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
 import { BARCODE_CATALOG, lookupBarcodeInCatalog, findGameInCatalog } from '../data/barcodeCatalog';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
+import { getGeminiAuthHeaders, hasStoredGeminiApiKey } from '../utils/geminiApiKey';
 
 export function getSafeCoverUrl(url?: string): string {
   if (!url) return '';
@@ -24,8 +25,10 @@ interface AddGameModalProps {
   onClose: () => void;
   onAddGame: (game: Omit<Game, 'id' | 'addedAt'>) => void;
   initialBarcodeMode?: boolean;
+  initialBarcode?: string;
   existingGames?: Game[];
   onUpdateQuantity?: (gameId: string, newQuantity: number) => void;
+  onOpenSettings?: () => void;
 }
 
 export const AddGameModal: React.FC<AddGameModalProps> = ({
@@ -33,8 +36,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   onClose,
   onAddGame,
   initialBarcodeMode = false,
+  initialBarcode = '',
   existingGames = [],
   onUpdateQuantity,
+  onOpenSettings,
 }) => {
   const [activeTab, setActiveTab] = useState<'barcode' | 'manual'>(
     initialBarcodeMode ? 'barcode' : 'manual'
@@ -43,8 +48,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialBarcodeMode ? 'barcode' : 'manual');
+      if (initialBarcode) {
+        setBarcode(initialBarcode);
+      }
     }
-  }, [isOpen, initialBarcodeMode]);
+  }, [isOpen, initialBarcodeMode, initialBarcode]);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -100,15 +108,26 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   };
 
   const handleBarcodeDetected = async (code: string) => {
-    setBarcode(code);
+    if (!code) return;
+    const cleanCode = code.trim();
+    setBarcode(cleanCode);
     setIsSearching(true);
     setLookupMessage(null);
     setStockUpdatedSuccess(null);
 
+    const codeDigits = cleanCode.replace(/\D/g, '');
+    const codeUnpadded = codeDigits.replace(/^0+/, '');
+
     // 1. Fast check: is this barcode already present in our existing stock?
-    const localMatch = existingGames.find(
-      (g) => g.barcode && g.barcode.trim() === code.trim()
-    );
+    const localMatch = existingGames.find((g) => {
+      if (!g.barcode) return false;
+      const bClean = g.barcode.trim();
+      if (bClean === cleanCode) return true;
+      const bDigits = bClean.replace(/\D/g, '');
+      if (bDigits && bDigits === codeDigits) return true;
+      const bUnpadded = bDigits.replace(/^0+/, '');
+      return bUnpadded && bUnpadded === codeUnpadded && codeUnpadded.length >= 7;
+    });
 
     if (localMatch) {
       setTitle(localMatch.title || '');
@@ -134,8 +153,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       return;
     }
 
-    // 2. Fast check in BARCODE_CATALOG & sample/preset games (instant 0ms resolution)
-    const catMatch = lookupBarcodeInCatalog(code);
+    // 2. Fast check in BARCODE_CATALOG (instant 0ms resolution)
+    const catMatch = lookupBarcodeInCatalog(cleanCode);
     if (catMatch) {
       setTitle(catMatch.title || '');
       if (CONSOLE_LIST.includes(catMatch.console as any)) {
@@ -154,16 +173,22 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
       setLookupMessage({
         type: 'success',
-        text: `Jeu identifié instantanément : "${catMatch.title}" (${catMatch.console}). Vérifiez les détails ci-dessous !`,
+        text: `Jeu identifié avec succès par code-barres : "${catMatch.title}" (${catMatch.console}). Toutes les informations ont été pré-remplies !`,
       });
       setIsSearching(false);
       setActiveTab('manual');
       return;
     }
 
-    const presetMatch = INITIAL_GAMES.find(
-      (g) => g.barcode && g.barcode.trim() === code.trim()
-    );
+    const presetMatch = INITIAL_GAMES.find((g) => {
+      if (!g.barcode) return false;
+      const bClean = g.barcode.trim();
+      if (bClean === cleanCode) return true;
+      const bDigits = bClean.replace(/\D/g, '');
+      if (bDigits && bDigits === codeDigits) return true;
+      const bUnpadded = bDigits.replace(/^0+/, '');
+      return bUnpadded && bUnpadded === codeUnpadded && codeUnpadded.length >= 7;
+    });
     if (presetMatch) {
       setTitle(presetMatch.title || '');
       if (CONSOLE_LIST.includes(presetMatch.console as any)) {
@@ -195,8 +220,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
       const res = await fetch('/api/games/lookup-barcode', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode: code }),
+        headers: { 'Content-Type': 'application/json', ...getGeminiAuthHeaders() },
+        body: JSON.stringify({ barcode: cleanCode }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -217,11 +242,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         if (g.developer) setDeveloper(g.developer);
         if (g.genre) setGenre(g.genre);
         if (g.synopsis && !notes) setNotes(g.synopsis);
-        setEstimatedValue(estimateMarketValue(g.title, g.console, condition));
+        if (typeof g.estimatedValue === 'number' && g.estimatedValue > 0) {
+          setEstimatedValue(g.estimatedValue);
+        } else {
+          setEstimatedValue(estimateMarketValue(g.title, g.console, condition));
+        }
         if (g.coverUrl) {
           setCoverUrl(getSafeCoverUrl(g.coverUrl));
         } else {
-          // Auto-fetch official cover in background
           fetch(`/api/games/find-cover?title=${encodeURIComponent(g.title)}&console=${encodeURIComponent(g.console || '')}`)
             .then((r) => r.json())
             .then((d) => {
@@ -238,14 +266,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       } else {
         setLookupMessage({
           type: 'warning',
-          text: data.message || 'Code-barres scanné avec succès ! Entrez le nom du jeu ci-dessous pour lancer la recherche automatique.',
+          text: data.message || `Code-barres (${cleanCode}) mémorisé avec succès ! Entrez le nom du jeu ci-dessous pour compléter la fiche.`,
         });
         setActiveTab('manual');
       }
     } catch {
       setLookupMessage({
         type: 'warning',
-        text: 'Code-barres scanné et mémorisé avec succès. Entrez le titre du jeu ci-dessous pour compléter automatiquement la fiche.',
+        text: `Code-barres (${cleanCode}) mémorisé. Entrez le titre du jeu ci-dessous pour compléter automatiquement la fiche.`,
       });
       setActiveTab('manual');
     } finally {
@@ -283,7 +311,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
       const res = await fetch('/api/games/search-gemini', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getGeminiAuthHeaders() },
         body: JSON.stringify({ query: title, console: targetConsole }),
         signal: controller.signal,
       });
@@ -301,7 +329,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         if (!genre && best.genre) setGenre(best.genre);
         if (!notes && best.synopsis) setNotes(best.synopsis);
         if (estimatedValue === '') {
-          setEstimatedValue(estimateMarketValue(best.title, best.console || targetConsole, condition));
+          if (typeof best.estimatedValue === 'number' && best.estimatedValue > 0) {
+            setEstimatedValue(best.estimatedValue);
+          } else {
+            setEstimatedValue(estimateMarketValue(best.title, best.console || targetConsole, condition));
+          }
         }
         if (best.coverUrl) {
           setCoverUrl(getSafeCoverUrl(best.coverUrl));
@@ -512,7 +544,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
             }`}
           >
             <Barcode className="w-4 h-4" />
-            <span>Scanner code-barres</span>
+            <span>Recherche code-barres</span>
           </button>
           <button
             id="tab-manual"
@@ -550,7 +582,24 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
             ) : (
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             )}
-            <span>{lookupMessage.text}</span>
+            <div className="flex-1 space-y-1.5">
+              <span>{lookupMessage.text}</span>
+              {lookupMessage.type !== 'success' && !hasStoredGeminiApiKey() && onOpenSettings && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenSettings();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg font-bold text-[11px] transition cursor-pointer shadow-2xs"
+                  >
+                    <Settings className="w-3 h-3 text-amber-700" />
+                    <span>Ajouter votre clé API Gemini pour l'IA en ligne</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -561,6 +610,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
               isLoading={isSearching}
               existingGames={existingGames}
               autoStart={true}
+              initialCode={barcode}
             />
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -740,17 +790,54 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
               {/* Barcode & Genre */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="game-barcode" className="block text-xs font-bold text-slate-700 mb-1">
-                    Code-barres (EAN / UPC)
-                  </label>
-                  <input
-                    id="game-barcode"
-                    type="text"
-                    placeholder="Ex: 0045496420079"
-                    value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="game-barcode" className="text-xs font-bold text-slate-700">
+                      Code-barres (EAN / UPC)
+                    </label>
+                    {barcode.replace(/\D/g, '').length >= 6 && (
+                      <button
+                        type="button"
+                        onClick={() => handleBarcodeDetected(barcode)}
+                        disabled={isSearching}
+                        className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                        title="Rechercher directement à partir de ce code-barres"
+                      >
+                        <Search className="w-3 h-3" />
+                        <span>Identifier le jeu</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <input
+                      id="game-barcode"
+                      type="text"
+                      placeholder="Ex: 5030932111822 ou 0045496420079"
+                      value={barcode}
+                      onChange={(e) => setBarcode(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (barcode.replace(/\D/g, '').length >= 6) {
+                            handleBarcodeDetected(barcode);
+                          }
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleBarcodeDetected(barcode)}
+                      disabled={isSearching || barcode.replace(/\D/g, '').length < 6}
+                      className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                      title="Identifier automatiquement le jeu avec ce code-barres"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Identifier</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Tapez ou collez un code et cliquez sur Identifier pour trouver le jeu sans taper le titre.
+                  </p>
                 </div>
                 <div>
                   <label htmlFor="game-genre" className="block text-xs font-bold text-slate-700 mb-1">
@@ -896,6 +983,9 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     />
                     <span className="absolute right-3 top-2 text-xs font-bold text-emerald-700">€</span>
                   </div>
+                  <span className="text-[10px] text-emerald-800/80 mt-1 block">
+                    Argus Mister Game Price & Ventes réelles eBay France (PAL FR)
+                  </span>
                 </div>
 
                 <div>

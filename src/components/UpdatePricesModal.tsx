@@ -14,8 +14,10 @@ import {
 import {
   COTE_SOURCE_INFO,
   estimateMarketValue,
-  getPriceChartingSearchUrl,
   getMisterGamePriceSearchUrl,
+  getEbayFranceSoldSearchUrl,
+  getLeboncoinSearchUrl,
+  getVintedSearchUrl,
 } from '../utils/marketPriceGuide';
 
 interface UpdatePricesModalProps {
@@ -53,7 +55,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
 
   const handleExecuteRecalculate = () => {
     onRecalculateAll();
-    showToast('Toutes les cotes ont été recalculées selon l’argus PriceCharting.');
+    showToast('Toutes les cotes ont été recalculées selon l’argus français Mister Game Price.');
   };
 
   const handleExecutePercentage = (positive: boolean) => {
@@ -180,38 +182,36 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
               <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-4 space-y-2.5">
                 <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
                   <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Sur quel site est établie la cote ?</span>
+                  <span>Argus réaliste : Marché Français & Européen</span>
                 </div>
                 <p className="text-xs text-emerald-950 leading-relaxed">
-                  La cote des jeux de votre collection est établie selon les données de référence de{' '}
-                  <strong className="font-semibold text-emerald-900">PriceCharting</strong>, la plus grande base mondiale spécialisée dans le rétrogaming et le jeu vidéo physique, complétée par{' '}
-                  <strong className="font-semibold text-emerald-900">Mister Game Price</strong> pour le marché français.
+                  L'argus de l'application est dorénavant aligné sur les transactions effectives du marché français et européen (éditions <strong>PAL France</strong> avec boîte, jaquette et notice en français). Il se base en priorité sur <strong className="font-semibold text-emerald-900">Mister Game Price</strong> (l'Argus français de référence) et l'historique des <strong className="font-semibold text-emerald-900">ventes terminées et payées en Euros sur eBay France</strong>, complété par <strong className="font-semibold text-emerald-900">LeBonCoin & Vinted</strong>.
                 </p>
               </div>
 
               {/* Source cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* PriceCharting */}
-                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-emerald-300 transition space-y-2.5">
+                {/* Mister Game Price */}
+                <div className="bg-white rounded-xl border-2 border-emerald-300 p-4 shadow-2xs hover:border-emerald-500 transition space-y-2.5 relative">
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Source Principale
+                      <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                        Argus Officiel France & PAL
                       </span>
-                      <h3 className="text-base font-black text-slate-900 mt-1">PriceCharting</h3>
+                      <h3 className="text-base font-black text-slate-900 mt-1">Mister Game Price</h3>
                     </div>
                     <a
                       href={COTE_SOURCE_INFO.primaryUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition"
-                      title="Visiter PriceCharting"
+                      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition"
+                      title="Visiter Mister Game Price"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Analyse des transactions réelles et ventes terminées sur <strong>eBay</strong>, magasins rétro et conventions. Offre un cours actualisé pour les états <em>Loose</em>, <em>CIB (Complet)</em> et <em>Neuf</em>.
+                    Argus spécialisé dédié aux éditions françaises et européennes. Prend en compte la valeur des jaquettes FR, notices francophones, rééditions et éditions collectors PAL.
                   </p>
                   <a
                     href={COTE_SOURCE_INFO.primaryUrl}
@@ -219,69 +219,73 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline"
                   >
-                    Ouvrir pricecharting.com <ExternalLink className="w-3 h-3" />
+                    Consulter mistergameprice.com <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
 
-                {/* Mister Game Price */}
-                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-emerald-300 transition space-y-2.5">
+                {/* eBay France - Ventes Réussies */}
+                <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-indigo-300 transition space-y-2.5">
                   <div className="flex items-start justify-between">
                     <div>
                       <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                        Spécialité France & PAL
+                        Transactions Réelles (Euros €)
                       </span>
-                      <h3 className="text-base font-black text-slate-900 mt-1">Mister Game Price</h3>
+                      <h3 className="text-base font-black text-slate-900 mt-1">eBay France (Ventes réussies)</h3>
                     </div>
                     <a
-                      href={COTE_SOURCE_INFO.secondaryUrl}
+                      href="https://www.ebay.fr"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition"
-                      title="Visiter Mister Game Price"
+                      title="Visiter eBay.fr"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Argus francophone tenant compte des spécificités linguistiques (jaquettes FR, notices en français, versions intégrales et tirages limités PAL).
+                    Historique des ventes conclues et payées en France et en Europe. Reflète fidèlement le cours réel du marché sans être faussé par les annonces invendues à prix excessifs.
                   </p>
                   <a
-                    href={COTE_SOURCE_INFO.secondaryUrl}
+                    href="https://www.ebay.fr"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 hover:underline"
                   >
-                    Ouvrir mistergameprice.com <ExternalLink className="w-3 h-3" />
+                    Voir ebay.fr en direct <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
               </div>
 
-              {/* Barème d'état */}
+              {/* Barème d'état & réalité économique */}
               <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Comment la cote est calculée selon l'état :
+                  Barème de valorisation selon l'état (Marché français) :
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
                   <div className="p-2.5 rounded-lg bg-white border border-slate-200">
                     <span className="block font-bold text-slate-800">Neuf sous blister</span>
-                    <span className="text-emerald-700 font-mono font-bold">+80% (x1.8)</span>
+                    <span className="text-emerald-700 font-mono font-bold">+100% (x2.0)</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-white border border-slate-200">
                     <span className="block font-bold text-slate-800">Complet (CIB)</span>
                     <span className="text-indigo-700 font-mono font-bold">100% (Référence)</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-white border border-slate-200">
-                    <span className="block font-bold text-slate-800">Loose (seul)</span>
-                    <span className="text-amber-700 font-mono font-bold">45% (x0.45)</span>
+                    <span className="block font-bold text-slate-800">Loose (sans boîte)</span>
+                    <span className="text-amber-700 font-mono font-bold">40% (x0.40)</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-white border border-slate-200">
-                    <span className="block font-bold text-slate-800">Boîte seule</span>
-                    <span className="text-slate-700 font-mono font-bold">35% (x0.35)</span>
+                    <span className="block font-bold text-slate-800">Boîte + notice seule</span>
+                    <span className="text-slate-700 font-mono font-bold">40% (x0.40)</span>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-500 pt-1">
-                  💡 Vous pouvez à tout moment personnaliser la cote de n'importe quel jeu pour refléter son état exact ou une édition collector rare.
-                </p>
+                <div className="bg-amber-50/70 border border-amber-200/70 rounded-lg p-2.5 text-[11px] text-amber-900 space-y-1 mt-2">
+                  <p className="font-semibold">⚖️ Spécificités du marché français intégrées :</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-slate-700">
+                    <li><strong>Jeux de sport annuels (FIFA, PES, NBA 2K) :</strong> plafonnés à <strong>2€ - 3€</strong> complets (1€ loose), conformément au marché réel de l'occasion en France.</li>
+                    <li><strong>Rétrogaming Nintendo en boîte carton :</strong> la boîte et la notice françaises d'origine représentent 60 à 70% de la valeur totale.</li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}
@@ -290,15 +294,15 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
           {activeTab === 'actions' && (
             <div className="space-y-4">
               <div className="space-y-3">
-                {/* Action 1: Recalculer tout selon PriceCharting */}
+                {/* Action 1: Recalculer tout selon Mister Game Price */}
                 <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-black text-emerald-950 flex items-center gap-1.5">
                       <RefreshCw className="w-4 h-4 text-emerald-700" />
-                      Recalculer automatiquement selon l'argus PriceCharting
+                      Recalculer automatiquement selon l'Argus Français
                     </h4>
                     <p className="text-xs text-slate-600 mt-1">
-                      Réapplique les cotes officielles du catalogue PriceCharting à l'ensemble des {games.length} jeux selon leur console et leur état.
+                      Réapplique les cotes officielles de Mister Game Price et des ventes réelles en France à l'ensemble des {games.length} jeux selon leur état et leur édition.
                     </p>
                   </div>
                   <button
@@ -467,11 +471,11 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                               Modifier
                             </button>
                             <a
-                              href={getPriceChartingSearchUrl(game.title, game.console)}
+                              href={getMisterGamePriceSearchUrl(game.title, game.console)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1 rounded bg-slate-100 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 cursor-pointer"
-                              title="Rechercher sur PriceCharting"
+                              className="p-1 rounded bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 cursor-pointer"
+                              title="Consulter la cote sur Mister Game Price (FR)"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>

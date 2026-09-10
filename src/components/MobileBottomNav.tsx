@@ -1,5 +1,5 @@
 import React from 'react';
-import { Gamepad2, Barcode, Plus, BarChart3, HelpCircle, Search } from 'lucide-react';
+import { Gamepad2, Barcode, Plus, BarChart3, HelpCircle, Settings, Search } from 'lucide-react';
 
 interface MobileBottomNavProps {
   totalGames: number;
@@ -71,15 +71,19 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <span className="text-[10px] font-semibold">Ajouter</span>
         </button>
 
-        {/* 5: Guide / Aide */}
+        {/* 5: Guide / Paramètres */}
         <button
           id="mobile-nav-btn-guide"
           type="button"
           onClick={onOpenGuide}
-          className="flex flex-col items-center justify-center gap-1 text-slate-600 hover:text-indigo-600 transition active:scale-95 py-1 cursor-pointer"
+          className="flex flex-col items-center justify-center gap-0.5 text-slate-600 hover:text-indigo-600 transition active:scale-95 py-1 cursor-pointer"
+          title="Paramètres, Clé API & Guide"
         >
-          <HelpCircle className="w-5 h-5" />
-          <span className="text-[10px] font-semibold">Guide</span>
+          <div className="relative flex items-center justify-center">
+            <HelpCircle className="w-5 h-5 text-indigo-600" />
+            <Settings className="w-3 h-3 text-slate-600 absolute -bottom-1 -right-1 bg-white rounded-full ring-1 ring-slate-200" />
+          </div>
+          <span className="text-[10px] font-semibold">Paramètres</span>
         </button>
       </div>
     </nav>

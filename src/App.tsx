@@ -86,6 +86,7 @@ export default function App() {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addModalBarcodeMode, setAddModalBarcodeMode] = useState(false);
+  const [addModalInitialBarcode, setAddModalInitialBarcode] = useState('');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
@@ -128,11 +129,21 @@ export default function App() {
     // Filter by search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
+      const qDigits = q.replace(/\D/g, '');
+      const qUnpadded = qDigits.replace(/^0+/, '');
       result = result.filter((g) => {
+        const barcodeDigits = g.barcode ? g.barcode.replace(/\D/g, '') : '';
+        const barcodeUnpadded = barcodeDigits.replace(/^0+/, '');
+        const barcodeMatch = g.barcode && (
+          g.barcode.toLowerCase().includes(q) ||
+          (qDigits.length >= 6 && barcodeDigits.includes(qDigits)) ||
+          (qUnpadded.length >= 6 && barcodeUnpadded.includes(qUnpadded))
+        );
+
         return (
           g.title.toLowerCase().includes(q) ||
           g.console.toLowerCase().includes(q) ||
-          (g.barcode && g.barcode.includes(q)) ||
+          barcodeMatch ||
           (g.genre && g.genre.toLowerCase().includes(q)) ||
           (g.publisher && g.publisher.toLowerCase().includes(q)) ||
           (g.developer && g.developer.toLowerCase().includes(q))
@@ -202,8 +213,9 @@ export default function App() {
   }, [filteredGames, groupByConsole, selectedConsole]);
 
   // Handlers
-  const handleOpenAddModal = (barcodeMode: boolean = false) => {
+  const handleOpenAddModal = (barcodeMode: boolean = false, initialBarcode: string = '') => {
     setAddModalBarcodeMode(barcodeMode);
+    setAddModalInitialBarcode(initialBarcode);
     setIsAddModalOpen(true);
   };
 
@@ -431,6 +443,7 @@ export default function App() {
           filteredEstimatedValue={filteredEstimatedValue}
           viewMode={viewMode}
           onChangeViewMode={setViewMode}
+          onOpenBarcodeScanner={(code) => handleOpenAddModal(true, code || '')}
         />
 
         {/* Game List Display */}
@@ -449,6 +462,18 @@ export default function App() {
                   : 'Votre collection est actuellement vide. Commencez par ajouter un jeu !'}
               </p>
             </div>
+            {searchQuery.replace(/\D/g, '').length >= 6 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddModal(true, searchQuery.trim())}
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-sm cursor-pointer active:scale-95"
+                >
+                  <Barcode className="w-4 h-4" />
+                  <span>Identifier le code-barres « {searchQuery.trim()} »</span>
+                </button>
+              </div>
+            )}
             <div className="flex justify-center gap-2 pt-2">
               {searchQuery && (
                 <button
@@ -678,11 +703,16 @@ export default function App() {
 
       <AddGameModal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setAddModalInitialBarcode('');
+        }}
         onAddGame={handleAddGame}
         initialBarcodeMode={addModalBarcodeMode}
+        initialBarcode={addModalInitialBarcode}
         existingGames={games}
         onUpdateQuantity={handleUpdateQuantity}
+        onOpenSettings={() => setIsGuideOpen(true)}
       />
 
       <GameDetailsModal

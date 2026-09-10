@@ -1,5 +1,5 @@
 import React from 'react';
-import { Gamepad2, Plus, Barcode, BarChart3, HelpCircle } from 'lucide-react';
+import { Gamepad2, Plus, Barcode, BarChart3, HelpCircle, Settings } from 'lucide-react';
 
 interface NavbarProps {
   totalGames: number;
@@ -37,16 +37,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Header Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Guide button */}
+          {/* Guide & Paramètres (Clé API) button */}
           <button
             id="btn-open-guide"
             type="button"
             onClick={onOpenGuide}
-            className="px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-            title="Guide, explications & aide"
+            className="px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200/70 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            title="Paramètres, Clé API & Guide"
           >
-            <HelpCircle className="w-4 h-4 text-indigo-600" />
-            <span className="hidden sm:inline">Guide</span>
+            <div className="relative flex items-center justify-center">
+              <HelpCircle className="w-4 h-4 text-indigo-600" />
+              <Settings className="w-2.5 h-2.5 text-slate-600 absolute -bottom-1 -right-1 bg-white rounded-full ring-1 ring-slate-200" />
+            </div>
+            <span className="hidden sm:inline">Paramètres & Aide</span>
           </button>
 
           {/* Stats button */}

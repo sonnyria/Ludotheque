@@ -19,7 +19,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-gemini-api-key');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -28,35 +28,44 @@ app.use((req, res, next) => {
 
 // Lazy GoogleGenAI initialization
 let aiClient: GoogleGenAI | null = null;
-function getAi(): GoogleGenAI | null {
-  const key = process.env.GEMINI_API_KEY;
+function getAi(customKey?: string): GoogleGenAI | null {
+  const cleanCustom = customKey ? customKey.trim() : '';
+  const key = cleanCustom.length > 5 ? cleanCustom : process.env.GEMINI_API_KEY;
   if (!key) {
     return null;
   }
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
+  if (!cleanCustom && aiClient) {
+    return aiClient;
   }
-  return aiClient;
+  const client = new GoogleGenAI({
+    apiKey: key,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+  if (!cleanCustom) {
+    aiClient = client;
+  }
+  return client;
 }
 
 // Circuit breaker for Gemini to prevent repeated stalls or errors when quota/auth/dunning is unavailable
 let geminiDisabledUntil = 0;
 let geminiPermanentlyDisabled = false;
 
-function isGeminiAvailable(): boolean {
+function isGeminiAvailable(customKey?: string): boolean {
+  if (customKey && customKey.trim().length > 5) {
+    return true; // User provided key, always attempt
+  }
   if (geminiPermanentlyDisabled) return false;
   if (Date.now() < geminiDisabledUntil) return false;
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
-function markGeminiFailure(err?: any) {
+function markGeminiFailure(err?: any, isCustomKey: boolean = false) {
+  if (isCustomKey) return;
   const errMsg = typeof err === 'string' ? err : (err?.message || JSON.stringify(err || ''));
   if (/dunning|PERMISSION_DENIED|403|billing|API_KEY_INVALID|quota/i.test(errMsg)) {
     geminiPermanentlyDisabled = true;
@@ -577,11 +586,12 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     }
 
     // 4. Try Gemini AI lookup if available & circuit-breaker is open
-    if (isGeminiAvailable()) {
-      const ai = getAi();
+    const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
+    if (isGeminiAvailable(customApiKey)) {
+      const ai = getAi(customApiKey);
       if (ai) {
         try {
-          const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo commerciaux pour consoles.
+          const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo commerciaux pour consoles, et spécialiste de l'Argus du marché français et européen (Mister Game Price, ventes effectives eBay France en Euros, Vinted et LeBonCoin).
 Le code-barres EAN/UPC suivant a été scanné sur la boîte d'un jeu vidéo physique : "${cleanCode}".
 Identifie avec la plus grande précision le jeu vidéo exact correspondant :
 - title: le titre officiel complet du jeu vidéo
@@ -591,6 +601,7 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
 - developer: studio de développement
 - genre: genre principal en français
 - synopsis: court résumé en 1-2 phrases en français
+- estimatedValue: cote argus réaliste d'occasion en Euros (€) pour une version complète en boîte (CIB) sur le marché français (Mister Game Price & ventes conclues eBay France). Attention : les jeux de sport annuels de masse (FIFA, PES, NBA) valent entre 2€ et 3€, tandis que les classiques Nintendo en boîte française (Zelda, Pokémon, Mario) ou RPG rares ont une cote élevée.
 - confidence: 'high' | 'medium' | 'low'`;
 
           const aiResponse = await withTimeout(
@@ -609,13 +620,14 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
                     developer: { type: Type.STRING },
                     genre: { type: Type.STRING },
                     synopsis: { type: Type.STRING },
+                    estimatedValue: { type: Type.INTEGER },
                     confidence: { type: Type.STRING }
                   },
                   required: ['title', 'console', 'confidence']
                 }
               }
             }),
-            3500,
+            5000,
             'Délai de recherche dépassé.'
           );
 
@@ -640,6 +652,7 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
                 developer: parsed.developer || undefined,
                 genre: parsed.genre || undefined,
                 synopsis: parsed.synopsis || undefined,
+                estimatedValue: typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0 ? parsed.estimatedValue : undefined,
                 barcode: cleanCode,
                 confidence: parsed.confidence || 'medium',
                 coverUrl: autoCoverUrl,
@@ -647,7 +660,7 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
             });
           }
         } catch (aiErr: any) {
-          markGeminiFailure(aiErr);
+          markGeminiFailure(aiErr, Boolean(customApiKey));
         }
       }
     }
@@ -686,8 +699,9 @@ app.post('/api/games/search-gemini', async (req, res) => {
     }
 
     // 2. Try Gemini AI if available & circuit-breaker is open
-    if (isGeminiAvailable()) {
-      const ai = getAi();
+    const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
+    if (isGeminiAvailable(customApiKey)) {
+      const ai = getAi(customApiKey);
       if (ai) {
         try {
           const prompt = `Tu es une encyclopédie de jeux vidéo. L'utilisateur veut ajouter un jeu à sa collection personnelle :
@@ -701,7 +715,8 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
 - publisher: éditeur
 - developer: développeur
 - genre: genre en français
-- synopsis: court résumé en français (1 ou 2 phrases)`;
+- synopsis: court résumé en français (1 ou 2 phrases)
+- estimatedValue: cote argus réaliste d'occasion en Euros (€) pour une version complète en boîte (CIB) sur le marché français (Mister Game Price, ventes eBay France). FIFA/sports valent 2-3€; jeux très courants PS3/PS4/Xbox (comme MGS4, MGS V, GTA V, Uncharted) valent 8-12€ en complet; ne JAMAIS confondre Metal Gear Solid 4 (10€) avec Metal Gear Solid 1 sur PS1 (50€)`;
 
           const aiResponse = await withTimeout(
             ai.models.generateContent({
@@ -720,14 +735,15 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
                       publisher: { type: Type.STRING },
                       developer: { type: Type.STRING },
                       genre: { type: Type.STRING },
-                      synopsis: { type: Type.STRING }
+                      synopsis: { type: Type.STRING },
+                      estimatedValue: { type: Type.INTEGER }
                     },
                     required: ['title', 'console']
                   }
                 }
               }
             }),
-            3500,
+            5000,
             'Délai de recherche dépassé.'
           );
 
@@ -737,7 +753,7 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
             aiSuccess = true;
           }
         } catch (aiErr: any) {
-          markGeminiFailure(aiErr);
+          markGeminiFailure(aiErr, Boolean(customApiKey));
         }
       }
     }
@@ -777,6 +793,140 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
       });
     }
   }
+});
+
+// API: Estimer la cote d'un jeu selon l'argus français (Mister Game Price & ventes réelles eBay France)
+app.post('/api/games/estimate-price', async (req, res) => {
+  const { title, console: consoleName, condition } = req.body;
+  if (!title) {
+    return res.status(400).json({ error: 'Titre manquant' });
+  }
+
+  const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
+  if (isGeminiAvailable(customApiKey)) {
+    const ai = getAi(customApiKey);
+    if (ai) {
+      try {
+        const prompt = `Tu es un expert du marché français et européen des jeux vidéo d'occasion (spécialiste de l'Argus Mister Game Price, des ventes réussies eBay France en Euros, et des transactions Vinted/LeBonCoin).
+Estime la cote d'occasion actuelle en Euros (€) pour le jeu suivant :
+- Titre : "${title}"
+- Console : "${consoleName || 'Non précisé'}"
+- État de conservation : "${condition || 'complet'}" (options : neuf sous blister, complet avec boîte et notice en français, loose sans boîte, boîte seule)
+
+Règles impératives du marché français :
+1. Les jeux de sport annuels de masse (FIFA, PES, NBA 2K) sur PS2/PS3/PS4/Xbox valent seulement 2€ à 3€ en complet, 1€ en loose.
+2. Les jeux très courants sur PS3 / PS4 / Xbox (Metal Gear Solid 4, Metal Gear Solid V, Uncharted, The Last of Us, Grand Theft Auto IV/V, Assassin's Creed) se trouvent partout en abondance en France et valent entre 8€ et 12€ en boîte complet (CIB). Ne JAMAIS attribuer la cote de Metal Gear Solid 1 sur PS1 (50€) à Metal Gear Solid 4 (10€).
+3. Les classiques Nintendo en boîte et notice en français (Zelda, Pokémon, Mario, Metroid, SNES, N64, Game Boy, GameCube) ont une cote élevée conforme aux ventes réelles en France.
+4. Donne la valeur entière en Euros (€).
+
+Format de réponse JSON attendu :
+{
+  "estimatedValue": nombre entier en Euros,
+  "source": "Mister Game Price & Ventes eBay France",
+  "explanation": "court résumé expliquant l'estimation selon le marché français"
+}`;
+
+        const aiResponse = await withTimeout(
+          ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  estimatedValue: { type: Type.INTEGER },
+                  source: { type: Type.STRING },
+                  explanation: { type: Type.STRING }
+                },
+                required: ['estimatedValue']
+              }
+            }
+          }),
+          4000,
+          'Délai dépassé'
+        );
+
+        const parsed = JSON.parse(aiResponse.text || '{}');
+        if (typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0) {
+          return res.json({
+            estimatedValue: parsed.estimatedValue,
+            source: parsed.source || 'Mister Game Price & Ventes eBay France',
+            explanation: parsed.explanation || ''
+          });
+        }
+      } catch (err: any) {
+        markGeminiFailure(err, Boolean(customApiKey));
+      }
+    }
+  }
+
+  return res.json({
+    estimatedValue: null,
+    source: 'Mister Game Price'
+  });
+});
+
+// API: Validate custom or system Gemini API key
+app.post('/api/gemini/validate-key', async (req, res) => {
+  const customKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
+  if (!customKey) {
+    if (process.env.GEMINI_API_KEY) {
+      return res.json({
+        valid: true,
+        source: 'system',
+        message: 'Une clé API Gemini système est déjà configurée et active sur ce serveur.',
+      });
+    }
+    return res.status(400).json({ valid: false, error: 'Veuillez saisir une clé API Gemini.' });
+  }
+
+  try {
+    const ai = new GoogleGenAI({
+      apiKey: customKey,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+    });
+    await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: 'ping',
+      }),
+      6000,
+      'Délai de connexion dépassé (plus de 6s).'
+    );
+    return res.json({
+      valid: true,
+      source: 'custom',
+      message: 'Clé API Gemini validée avec succès ! L\'intelligence artificielle est opérationnelle.',
+    });
+  } catch (err: any) {
+    const rawMsg = err?.message || String(err);
+    let friendly = 'La clé API a été rejetée par Google.';
+    if (/API_KEY_INVALID|INVALID_ARGUMENT|400/i.test(rawMsg)) {
+      friendly = 'Clé API Google Gemini non valide. Vérifiez que vous avez bien copié toute la clé commençant par AIzaSy... sans espace.';
+    } else if (/PERMISSION_DENIED|403/i.test(rawMsg)) {
+      friendly = 'Accès refusé par Google : vérifiez que l\'API Gemini est bien activée pour votre projet Google AI Studio.';
+    } else if (/quota|429/i.test(rawMsg)) {
+      friendly = 'Quota temporairement atteint sur cette clé. Veuillez patienter un instant.';
+    }
+    return res.status(400).json({
+      valid: false,
+      error: friendly,
+      raw: rawMsg,
+    });
+  }
+});
+
+// API: Check Gemini status
+app.get('/api/gemini/status', (req, res) => {
+  const customKey = ((req.headers['x-gemini-api-key'] as string) || '').trim();
+  const hasSystemKey = Boolean(process.env.GEMINI_API_KEY);
+  const isAvailable = isGeminiAvailable(customKey);
+  return res.json({
+    hasSystemKey,
+    hasCustomKey: Boolean(customKey),
+    isAvailable,
+  });
 });
 
 // Vite Middleware for development vs Static for production

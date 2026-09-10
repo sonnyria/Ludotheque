@@ -3,7 +3,16 @@ import { X, Trash2, Edit3, Barcode, Calendar, Building, Code2, Tag, Star, Clock,
 import { Game, GameCondition, GameStatus } from '../types';
 import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { CONSOLE_LIST } from '../data/sampleGames';
-import { estimateMarketValue, calculateValueMargin, getPriceChartingSearchUrl, COTE_SOURCE_INFO } from '../utils/marketPriceGuide';
+import {
+  estimateMarketValue,
+  calculateValueMargin,
+  getMisterGamePriceSearchUrl,
+  getEbayFranceSoldSearchUrl,
+  getLeboncoinSearchUrl,
+  getVintedSearchUrl,
+  getPriceChartingSearchUrl,
+  COTE_SOURCE_INFO,
+} from '../utils/marketPriceGuide';
 import { getSafeCoverUrl, handleImageError } from '../utils/imageUtils';
 
 interface GameDetailsModalProps {
@@ -517,21 +526,60 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                   </div>
                 </div>
 
-                {/* PriceCharting verification link & source mention */}
-                <div className="pt-2 border-t border-emerald-100/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="text-[11px] text-emerald-900/80">
-                    Cote établie d'après <strong className="font-semibold text-emerald-950">PriceCharting</strong> & <strong className="font-semibold text-emerald-950">Mister Game Price</strong>
-                  </span>
-                  <a
-                    href={getPriceChartingSearchUrl(game.title, game.console)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 hover:underline ml-auto"
-                    title="Consulter les transactions eBay et cours mondial sur PriceCharting"
-                  >
-                    <span>Vérifier sur PriceCharting</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                {/* Sources & Liens de vérification du marché français & européen */}
+                <div className="pt-2.5 border-t border-emerald-100/80 space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-emerald-950">
+                    <span className="font-semibold flex items-center gap-1.5">
+                      <Coins className="w-3.5 h-3.5 text-emerald-600" />
+                      Argus de référence : <strong className="text-emerald-900 font-bold">Mister Game Price</strong> & <strong className="text-emerald-900 font-bold">eBay France</strong> (Euros)
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <a
+                      href={getMisterGamePriceSearchUrl(game.title, game.console)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100/90 border border-indigo-200/80 px-2.5 py-1 rounded-lg transition"
+                      title="Consulter la fiche argus et les cotes françaises sur Mister Game Price"
+                    >
+                      <span>Mister Game Price (FR)</span>
+                      <ExternalLink className="w-3 h-3 text-indigo-500" />
+                    </a>
+
+                    <a
+                      href={getEbayFranceSoldSearchUrl(game.title, game.console, game.condition)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50/80 hover:bg-emerald-100/90 border border-emerald-200/80 px-2.5 py-1 rounded-lg transition"
+                      title="Voir les réelles transactions conclues et payées en Euros sur eBay France"
+                    >
+                      <span>eBay.fr (Ventes réussies €)</span>
+                      <ExternalLink className="w-3 h-3 text-emerald-500" />
+                    </a>
+
+                    <a
+                      href={getLeboncoinSearchUrl(game.title, game.console)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 px-2.5 py-1 rounded-lg transition"
+                      title="Rechercher sur LeBonCoin"
+                    >
+                      <span>LeBonCoin</span>
+                      <ExternalLink className="w-3 h-3 text-amber-600" />
+                    </a>
+
+                    <a
+                      href={getVintedSearchUrl(game.title, game.console)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-teal-800 bg-teal-50/70 hover:bg-teal-100/80 border border-teal-200/80 px-2.5 py-1 rounded-lg transition"
+                      title="Rechercher sur Vinted"
+                    >
+                      <span>Vinted</span>
+                      <ExternalLink className="w-3 h-3 text-teal-600" />
+                    </a>
+                  </div>
                 </div>
               </div>
 

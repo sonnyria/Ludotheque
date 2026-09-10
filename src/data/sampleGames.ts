@@ -247,11 +247,14 @@ export const CONSOLE_LIST = [
 
 export const SAMPLE_BARCODES = [
   { code: '0045496420079', name: 'Zelda: Breath of the Wild (Switch)' },
+  { code: '0045496420383', name: 'Mario Kart 8 Deluxe (Switch)' },
+  { code: '0711719567974', name: 'Spider-Man 2 (PS5)' },
   { code: '0711719541172', name: 'God of War Ragnarök (PS5)' },
+  { code: '5030932111822', name: 'Titanfall 2 (PS4/Xbox)' },
+  { code: '5026555416970', name: 'Grand Theft Auto V' },
+  { code: '3391892015097', name: 'Elden Ring (PS5)' },
   { code: '0045496590741', name: 'Super Mario Odyssey (Switch)' },
-  { code: '0889842880770', name: 'Forza Horizon 5 (Xbox)' },
-  { code: '0711719398851', name: 'Demon\'s Souls (PS5)' },
   { code: '5026555424233', name: 'Red Dead Redemption 2 (PS4)' },
-  { code: '3391891999908', name: 'Elden Ring (PS5)' },
+  { code: '0889842880770', name: 'Forza Horizon 5 (Xbox)' },
   { code: '0045496428457', name: 'Metroid Dread (Switch)' }
 ];
