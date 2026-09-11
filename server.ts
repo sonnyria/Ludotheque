@@ -882,11 +882,19 @@ app.post('/api/gemini/validate-key', async (req, res) => {
     return res.status(400).json({ valid: false, error: 'Veuillez saisir une clé API Gemini.' });
   }
 
-  // Vérification rapide de format (les clés Google AI Studio commencent par AIzaSy et font environ 39 caractères)
-  if (!customKey.startsWith('AIzaSy')) {
+  // Vérification de format :
+  // - Nouveau format officiel Google AI Studio (2025/2026) : commence par "AQ."
+  // - Format classique Google Cloud : commence par "AIza..."
+  // - Clés personnalisées valides sans espaces (longueur >= 20)
+  const isValidFormat =
+    customKey.startsWith('AQ.') ||
+    customKey.startsWith('AIza') ||
+    (/^[A-Za-z0-9_.-]{20,}$/.test(customKey) && !/\s/.test(customKey));
+
+  if (!isValidFormat) {
     return res.status(400).json({
       valid: false,
-      error: 'Format non reconnu : les clés officielles Google AI Studio commencent toujours par "AIzaSy...". Vérifiez que vous avez bien copié la clé complète sans espace ni guillemets.',
+      error: 'Format non reconnu : les clés officielles Google AI Studio commencent généralement par "AQ." (nouvelles clés d\'autorisation) ou "AIzaSy..." (format classique). Vérifiez que vous avez bien copié la clé complète sans espace ni guillemets.',
     });
   }
 
@@ -935,7 +943,7 @@ app.post('/api/gemini/validate-key', async (req, res) => {
     const rawMsg = err?.message || String(err);
     let friendly = 'La clé API a été rejetée par Google.';
     if (/API_KEY_INVALID|INVALID_ARGUMENT|API key not valid/i.test(rawMsg)) {
-      friendly = 'Clé API Google Gemini non valide. Vérifiez que vous avez bien copié toute la clé commençant par AIzaSy... sans espace.';
+      friendly = 'Clé API Google Gemini non valide. Vérifiez que vous avez bien copié toute la clé (commençant par "AQ." ou "AIzaSy...") sans espace ni guillemets.';
     } else if (/PERMISSION_DENIED|403/i.test(rawMsg)) {
       friendly = 'Accès refusé par Google : vérifiez que l\'API Gemini est bien activée pour votre projet Google AI Studio.';
     } else if (/quota|RESOURCE_EXHAUSTED|429/i.test(rawMsg)) {

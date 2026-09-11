@@ -62,11 +62,19 @@ export async function validateGeminiApiKey(
     };
   }
 
-  // Vérification basique du format officiel Google AI Studio
-  if (!cleanKey.startsWith('AIzaSy') || cleanKey.length < 25) {
+  // Vérification du format Google AI Studio :
+  // - Nouveau format officiel Google AI Studio (2025/2026) : commence par "AQ."
+  // - Format classique Google : commence par "AIza..."
+  // - Clés personnalisées valides sans espaces (longueur >= 20)
+  const isValidFormat =
+    cleanKey.startsWith('AQ.') ||
+    cleanKey.startsWith('AIza') ||
+    (/^[A-Za-z0-9_.-]{20,}$/.test(cleanKey) && !/\s/.test(cleanKey));
+
+  if (!isValidFormat) {
     return {
       valid: false,
-      message: 'Format de clé invalide : une clé d\'API officielle Google Gemini commence toujours par "AIzaSy..." et comporte environ 39 caractères. Vérifiez que vous n\'avez pas inclus d\'espace ou de guillemets.',
+      message: 'Format de clé invalide : une clé d\'API Google Gemini officielle commence généralement par "AQ." (nouvelles clés d\'autorisation Google AI Studio) ou par "AIzaSy..." (format classique). Vérifiez que vous n\'avez pas inclus d\'espace ou de guillemets.',
     };
   }
 
@@ -115,7 +123,10 @@ export async function validateGeminiApiKey(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': cleanKey,
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: 'ping' }] }],
         }),

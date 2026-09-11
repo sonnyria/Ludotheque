@@ -322,7 +322,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({
                     <span className="font-pixel text-[10px] text-amber-300">VOTRE CLÉ API GEMINI</span>
                   </span>
                   <span className="text-[10px] text-slate-400 font-mono">
-                    Format : AIzaSy...
+                    Format : AQ... ou AIza...
                   </span>
                 </label>
 
@@ -332,7 +332,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({
                     type={showKey ? 'text' : 'password'}
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder="Collez votre clé ici (ex: AIzaSyD...)"
+                    placeholder="Collez votre clé ici (ex: AQ.Ab8... ou AIzaSy...)"
                     className="w-full pl-3 pr-20 py-2.5 bg-[#0a0e1a] border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 rounded-xl text-xs sm:text-sm font-mono text-cyan-300 placeholder:text-slate-600 transition outline-none"
                     autoComplete="off"
                     spellCheck={false}
@@ -472,7 +472,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({
                         Collez et enregistrez
                       </p>
                       <p className="text-slate-400 text-[11px] mt-0.5">
-                        Copiez la clé qui commence par <strong>AIzaSy...</strong>, collez-la dans le champ ci-dessus puis cliquez sur <strong>« ENREGISTRER »</strong>.
+                        Copiez votre clé Google (qui commence par <strong>AQ...</strong> ou <strong>AIzaSy...</strong>), collez-la dans le champ ci-dessus puis cliquez sur <strong>« ENREGISTRER »</strong>.
                       </p>
                     </div>
                   </div>
