@@ -117,66 +117,79 @@ export async function validateGeminiApiKey(
   }
 
   // 2. Fallback de secours direct auprès de Google Generative Language API (navigateur -> Google)
-  // Cela évite tout problème de proxy, de timeout ou d'erreur "Unexpected token T"
+  // Utilise les modèles actifs Google AI Studio (gemini-3.8-flash, gemini-3.6-flash, gemini-flash-latest)
   try {
-    const googleRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': cleanKey,
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'ping' }] }],
-        }),
-      }
-    );
+    for (const model of ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest']) {
+      try {
+        const googleRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': cleanKey,
+            },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: 'ping' }] }],
+            }),
+          }
+        );
 
-    const googleText = await googleRes.text();
-    let googleData: any = null;
-    try {
-      googleData = JSON.parse(googleText);
-    } catch {
-      // Ignorer
-    }
+        const googleText = await googleRes.text();
+        let googleData: any = null;
+        try {
+          googleData = JSON.parse(googleText);
+        } catch {
+          // Ignorer
+        }
 
-    if (googleRes.ok && (googleData?.candidates || googleData?.promptFeedback)) {
-      return {
-        valid: true,
-        message: 'Clé API Gemini vérifiée avec succès auprès de Google ! L\'IA est prête.',
-      };
-    }
+        if (googleRes.ok && (googleData?.candidates || googleData?.promptFeedback)) {
+          return {
+            valid: true,
+            message: 'Clé API Gemini vérifiée avec succès auprès de Google ! L\'IA est prête.',
+          };
+        }
 
-    if (googleData?.error) {
-      const errObj = googleData.error;
-      const msg = errObj.message || '';
-      const status = errObj.status || '';
-      if (status === 'INVALID_ARGUMENT' || /API_KEY_INVALID|API key not valid/i.test(msg)) {
-        return {
-          valid: false,
-          message: 'Clé API rejetée par Google : clé invalide. Vérifiez que vous avez bien copié toute la clé depuis Google AI Studio.',
-          error: msg,
-        };
+        if (googleData?.error) {
+          const errObj = googleData.error;
+          const msg = errObj.message || '';
+          const status = errObj.status || '';
+
+          if (status === 'INVALID_ARGUMENT' || /API_KEY_INVALID|API key not valid/i.test(msg)) {
+            return {
+              valid: false,
+              message: 'Clé API rejetée par Google : clé invalide. Vérifiez que vous avez bien copié toute la clé depuis Google AI Studio.',
+              error: msg,
+            };
+          }
+          if (status === 'PERMISSION_DENIED' || /PERMISSION_DENIED/i.test(msg)) {
+            return {
+              valid: false,
+              message: 'Accès refusé par Google : vérifiez que l\'API Gemini est bien activée pour votre compte Google Cloud / AI Studio.',
+              error: msg,
+            };
+          }
+          if (status === 'RESOURCE_EXHAUSTED' || /quota/i.test(msg)) {
+            return {
+              valid: true,
+              message: 'Clé API Gemini reconnue et valide ! (Note : le quota temporaire de requêtes est saturé, Google va le réinitialiser sous peu).',
+            };
+          }
+
+          // Si le modèle n'est pas disponible pour cet utilisateur, essayer le modèle suivant
+          if (/is not supported|not found|no longer available|not available/i.test(msg)) {
+            continue;
+          }
+
+          return {
+            valid: false,
+            message: `Erreur signalée par Google : ${msg}`,
+            error: msg,
+          };
+        }
+      } catch {
+        // Essayer le modèle suivant
       }
-      if (status === 'PERMISSION_DENIED' || /PERMISSION_DENIED/i.test(msg)) {
-        return {
-          valid: false,
-          message: 'Accès refusé par Google : vérifiez que l\'API Gemini est bien activée pour votre compte Google Cloud / AI Studio.',
-          error: msg,
-        };
-      }
-      if (status === 'RESOURCE_EXHAUSTED' || /quota/i.test(msg)) {
-        return {
-          valid: true,
-          message: 'Clé API Gemini reconnue et valide ! (Note : le quota temporaire de requêtes est saturé, Google va le réinitialiser sous peu).',
-        };
-      }
-      return {
-        valid: false,
-        message: `Erreur signalée par Google : ${msg}`,
-        error: msg,
-      };
     }
 
     return {

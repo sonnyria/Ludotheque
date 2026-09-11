@@ -904,11 +904,11 @@ app.post('/api/gemini/validate-key', async (req, res) => {
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
     });
 
-    // Tester avec le modèle standard gemini-2.5-flash ou gemini-3.8-flash
+    // Tester avec les modèles supportés : gemini-3.8-flash, gemini-3.6-flash, gemini-flash-latest
     let success = false;
     let lastError: any = null;
 
-    for (const modelName of ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash']) {
+    for (const modelName of ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest']) {
       try {
         await withTimeout(
           ai.models.generateContent({
