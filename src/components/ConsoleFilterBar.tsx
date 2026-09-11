@@ -42,26 +42,26 @@ export const ConsoleFilterBar: React.FC<ConsoleFilterBarProps> = ({
   onOpenBarcodeScanner,
 }) => {
   return (
-    <div id="filter-controls-bar" className="space-y-3">
+    <div id="filter-controls-bar" className="space-y-3 font-retro">
       {/* Top row: Search & View Options */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Search input */}
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-amber-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             id="search-input"
             type="text"
-            placeholder="Rechercher par titre, console, genre, code-barres..."
+            placeholder="Rechercher jeu, console, genre, code..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-16 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+            className="w-full pl-9 pr-16 py-2 bg-[#0d1222] border-2 border-slate-700/90 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 shadow-inner"
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
-                className="text-slate-400 hover:text-slate-600 text-xs p-1 cursor-pointer"
+                className="text-slate-400 hover:text-amber-400 text-xs p-1 cursor-pointer"
                 title="Effacer la recherche"
               >
                 ✕
@@ -71,7 +71,7 @@ export const ConsoleFilterBar: React.FC<ConsoleFilterBarProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenBarcodeScanner(searchQuery)}
-                className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                className="p-1 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/60 rounded-lg transition cursor-pointer"
                 title="Rechercher par code-barres ou scanner"
               >
                 <Barcode className="w-4 h-4" />
@@ -85,71 +85,71 @@ export const ConsoleFilterBar: React.FC<ConsoleFilterBarProps> = ({
           {/* View Mode Switcher Pill Group */}
           <div
             id="view-mode-selector"
-            className="inline-flex items-center p-1 bg-slate-200/80 rounded-xl border border-slate-200 shadow-inner"
+            className="inline-flex items-center p-1 bg-[#0a0d18] rounded-xl border border-slate-800 shadow-inner"
           >
             <button
               id="view-mode-list"
               type="button"
               onClick={() => onChangeViewMode('list')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-pixel font-bold flex items-center gap-1.5 transition cursor-pointer ${
                 viewMode === 'list'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-amber-400 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
               title="Affichage en liste détaillée"
             >
               <List className="w-3.5 h-3.5" />
-              <span>Liste</span>
+              <span>LISTE</span>
             </button>
 
             <button
               id="view-mode-shelf"
               type="button"
               onClick={() => onChangeViewMode('shelf')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-pixel font-bold flex items-center gap-1.5 transition cursor-pointer ${
                 viewMode === 'shelf'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-amber-400 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
               title="Affichage en vitrine / étagère de boîtiers"
             >
               <Library className="w-3.5 h-3.5" />
-              <span>Étagère</span>
+              <span>ÉTAGÈRE</span>
             </button>
 
             <button
               id="view-mode-table"
               type="button"
               onClick={() => onChangeViewMode('table')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-pixel font-bold flex items-center gap-1.5 transition cursor-pointer ${
                 viewMode === 'table'
-                  ? 'bg-white text-emerald-800 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-emerald-400 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
               title="Affichage Cote Argus (valeurs estimées et cotes d'occasion)"
             >
-              <Coins className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Cote Argus</span>
+              <Coins className="w-3.5 h-3.5 text-emerald-400" />
+              <span>ARGUS</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 font-pixel">
             {/* Alphabetical sort toggle */}
             <button
               id="btn-toggle-sort"
               type="button"
               onClick={onToggleSort}
-              className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              className="px-3 py-1.5 bg-[#12182b] hover:bg-[#182138] border border-slate-700 text-slate-200 rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
               title={sortAsc ? 'Tri alphabétique : A à Z' : 'Tri alphabétique : Z à A'}
             >
               {sortAsc ? (
                 <>
-                  <ArrowDownAZ className="w-4 h-4 text-indigo-600" />
+                  <ArrowDownAZ className="w-4 h-4 text-amber-400" />
                   <span>A → Z</span>
                 </>
               ) : (
                 <>
-                  <ArrowUpZA className="w-4 h-4 text-indigo-600" />
+                  <ArrowUpZA className="w-4 h-4 text-amber-400" />
                   <span>Z → A</span>
                 </>
               )}
@@ -160,15 +160,15 @@ export const ConsoleFilterBar: React.FC<ConsoleFilterBarProps> = ({
               id="btn-toggle-group-console"
               type="button"
               onClick={onToggleGroupByConsole}
-              className={`px-3 py-1.5 border rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition cursor-pointer ${
+              className={`px-3 py-1.5 border rounded-xl text-[10px] font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer ${
                 groupByConsole
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  ? 'bg-amber-400 text-slate-950 border-amber-400'
+                  : 'bg-[#12182b] border-slate-700 text-slate-300 hover:bg-[#182138]'
               }`}
               title="Afficher en sections séparées par console"
             >
-              <Layers className="w-4 h-4 text-indigo-600" />
-              <span className="hidden xs:inline">Grouper</span>
+              <Layers className="w-4 h-4" />
+              <span className="hidden xs:inline">GROUPER</span>
             </button>
           </div>
         </div>
@@ -187,14 +187,14 @@ export const ConsoleFilterBar: React.FC<ConsoleFilterBarProps> = ({
 
         {/* Quick status message when filtered */}
         {selectedConsole !== 'ALL' && (
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Affichage filtré sur <strong className="text-slate-800">{selectedConsole}</strong></span>
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <span>Filtre actif : <strong className="text-amber-300">{selectedConsole}</strong></span>
             <button
               type="button"
               onClick={() => onSelectConsole('ALL')}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+              className="text-xs font-bold font-pixel text-cyan-400 hover:text-cyan-300 underline cursor-pointer"
             >
-              Tout réafficher
+              TOUT AFFICHER
             </button>
           </div>
         )}

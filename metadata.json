@@ -1,6 +1,6 @@
 {
-  "name": "Collection de Jeux Vidéo",
-  "description": "Application de gestion de collection de jeux vidéo avec scan de code-barres, cote d'occasion argus en temps réel et estimation de la valeur totale de la collection.",
+  "name": "RetroArgus - Collection & Cotes Jeux Vidéo",
+  "description": "Gestionnaire et argus rétrogaming 80's & 90's pour collectionneurs : scan de codes-barres, estimation des cotes d'occasion en temps réel et suivi de la valeur de collection.",
   "requestFramePermissions": [
     "camera"
   ],

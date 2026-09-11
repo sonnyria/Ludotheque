@@ -425,7 +425,10 @@ export default function App() {
       />
 
       {/* Main Content Area (Compact, mobile-ergonomic layout) */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 space-y-3 sm:space-y-5 pb-24 md:pb-8">
+      <main
+        style={{ backgroundColor: '#010000' }}
+        className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 space-y-3 sm:space-y-5 pb-24 md:pb-8"
+      >
         {/* Filter, Consoles and Sorting Controls */}
         <ConsoleFilterBar
           consolesWithCounts={consolesWithCounts}
@@ -639,7 +642,10 @@ export default function App() {
                         className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: theme.accentColor }}
                       />
-                      <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                      <h3
+                        style={consoleName.toLowerCase().replace(/\s+/g, '-') === 'playstation-3' ? { color: '#717b9d' } : undefined}
+                        className="text-base sm:text-lg font-black text-slate-900 tracking-tight"
+                      >
                         {consoleName}
                       </h3>
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200/70 text-slate-700 font-mono">

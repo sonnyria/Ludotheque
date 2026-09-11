@@ -869,6 +869,7 @@ Format de réponse JSON attendu :
 
 // API: Validate custom or system Gemini API key
 app.post('/api/gemini/validate-key', async (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   const customKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
   if (!customKey) {
     if (process.env.GEMINI_API_KEY) {
@@ -881,34 +882,73 @@ app.post('/api/gemini/validate-key', async (req, res) => {
     return res.status(400).json({ valid: false, error: 'Veuillez saisir une clé API Gemini.' });
   }
 
+  // Vérification rapide de format (les clés Google AI Studio commencent par AIzaSy et font environ 39 caractères)
+  if (!customKey.startsWith('AIzaSy')) {
+    return res.status(400).json({
+      valid: false,
+      error: 'Format non reconnu : les clés officielles Google AI Studio commencent toujours par "AIzaSy...". Vérifiez que vous avez bien copié la clé complète sans espace ni guillemets.',
+    });
+  }
+
   try {
     const ai = new GoogleGenAI({
       apiKey: customKey,
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
     });
-    await withTimeout(
-      ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: 'ping',
-      }),
-      6000,
-      'Délai de connexion dépassé (plus de 6s).'
-    );
-    return res.json({
-      valid: true,
-      source: 'custom',
-      message: 'Clé API Gemini validée avec succès ! L\'intelligence artificielle est opérationnelle.',
-    });
+
+    // Tester avec le modèle standard gemini-2.5-flash ou gemini-3.8-flash
+    let success = false;
+    let lastError: any = null;
+
+    for (const modelName of ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash']) {
+      try {
+        await withTimeout(
+          ai.models.generateContent({
+            model: modelName,
+            contents: 'ping',
+          }),
+          4500,
+          'Délai de connexion dépassé'
+        );
+        success = true;
+        break;
+      } catch (err: any) {
+        lastError = err;
+        const msg = err?.message || String(err);
+        // Si la clé est expressément invalide, pas la peine de tester d'autres modèles
+        if (/API_KEY_INVALID|INVALID_ARGUMENT|API key not valid/i.test(msg)) {
+          break;
+        }
+      }
+    }
+
+    if (success) {
+      return res.json({
+        valid: true,
+        source: 'custom',
+        message: 'Clé API Gemini validée avec succès ! L\'intelligence artificielle est opérationnelle.',
+      });
+    }
+
+    throw lastError || new Error('Validation impossible');
   } catch (err: any) {
     const rawMsg = err?.message || String(err);
     let friendly = 'La clé API a été rejetée par Google.';
-    if (/API_KEY_INVALID|INVALID_ARGUMENT|400/i.test(rawMsg)) {
+    if (/API_KEY_INVALID|INVALID_ARGUMENT|API key not valid/i.test(rawMsg)) {
       friendly = 'Clé API Google Gemini non valide. Vérifiez que vous avez bien copié toute la clé commençant par AIzaSy... sans espace.';
     } else if (/PERMISSION_DENIED|403/i.test(rawMsg)) {
       friendly = 'Accès refusé par Google : vérifiez que l\'API Gemini est bien activée pour votre projet Google AI Studio.';
-    } else if (/quota|429/i.test(rawMsg)) {
-      friendly = 'Quota temporairement atteint sur cette clé. Veuillez patienter un instant.';
+    } else if (/quota|RESOURCE_EXHAUSTED|429/i.test(rawMsg)) {
+      // Si c'est un problème de quota, la clé est techniquement valide !
+      return res.json({
+        valid: true,
+        source: 'custom',
+        message: 'Clé API Gemini reconnue et enregistrée ! (Note : le quota gratuit de cette clé est actuellement saturé, l\'IA fonctionnera dès que Google aura libéré les requêtes).',
+      });
+    } else if (/Délai de connexion/i.test(rawMsg)) {
+      friendly = 'Délai d\'attente dépassé : les serveurs de Google ont mis trop de temps à répondre. Vérifiez votre connexion.';
     }
+
     return res.status(400).json({
       valid: false,
       error: friendly,

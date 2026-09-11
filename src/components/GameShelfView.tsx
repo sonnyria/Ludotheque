@@ -26,13 +26,13 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
               className="group flex flex-col cursor-pointer"
             >
               {/* 3D-styled Game Box */}
-              <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-slate-900 shadow-md group-hover:shadow-xl group-hover:-translate-y-1.5 transition-all duration-300 border border-slate-700/30">
+              <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-slate-900 shadow-md group-hover:shadow-2xl group-hover:shadow-amber-500/10 group-hover:-translate-y-1.5 transition-all duration-300 border-2 border-slate-700/50 group-hover:border-amber-400/80 group-hover:ring-2 group-hover:ring-amber-400/20">
                 {/* 3D Spine Highlight Illusion (left spine reflection) */}
                 <div className="absolute inset-y-0 left-0 w-2.5 bg-gradient-to-r from-black/40 via-white/20 to-transparent z-10 pointer-events-none" />
 
                 {/* Top Console Brand Strip */}
                 <div
-                  className="h-6 px-2 flex items-center justify-between text-[10px] font-black tracking-wider text-white uppercase shadow-inner z-10 relative"
+                  className="h-6 px-2 flex items-center justify-between text-[10px] font-bold tracking-wider text-white uppercase shadow-inner z-10 relative font-pixel"
                   style={{ backgroundColor: theme.accentColor }}
                 >
                   <span className="truncate pr-1">{game.console}</span>
@@ -65,7 +65,7 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
                   ) : (
                     <div className="w-full h-full p-3 bg-gradient-to-br from-slate-800 to-slate-900 flex flex-col items-center justify-center text-center">
                       <Gamepad2 className="w-8 h-8 text-slate-400 mb-1.5" />
-                      <span className="text-xs font-bold text-slate-200 line-clamp-3">
+                      <span className="text-xs font-bold text-slate-200 line-clamp-3 font-retro">
                         {game.title}
                       </span>
                     </div>
@@ -74,7 +74,7 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
                   {/* Status badge pill overlay & quick delete on hover */}
                   <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold border backdrop-blur-md bg-white/95 shadow-xs ${statusInfo.color}`}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold font-pixel border backdrop-blur-md bg-slate-950/90 shadow-xs ${statusInfo.color}`}
                     >
                       {statusInfo.label}
                     </span>
@@ -85,7 +85,7 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
                         e.stopPropagation();
                         onDelete(game.id, e);
                       }}
-                      className="p-1 rounded bg-black/60 hover:bg-rose-600 text-white/80 hover:text-white backdrop-blur shadow-xs opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                      className="p-1 rounded bg-black/80 hover:bg-rose-600 text-white/80 hover:text-white backdrop-blur shadow-xs opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -94,7 +94,7 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
                   {/* Quantity badge if > 1 */}
                   {(game.quantity || 1) > 1 && (
                     <div className="absolute top-1.5 left-1.5 z-10">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-600/95 text-white shadow-xs">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold font-pixel bg-amber-400 text-black shadow-xs">
                         x{game.quantity}
                       </span>
                     </div>
@@ -102,7 +102,7 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
 
                   {/* Star rating overlay if present */}
                   {game.rating && game.rating > 0 && (
-                    <div className="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-xs text-amber-400 text-[11px] font-bold">
+                    <div className="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-xs text-amber-300 text-[9px] font-pixel">
                       <Star className="w-3 h-3 fill-amber-400" />
                       <span>{game.rating}</span>
                     </div>
@@ -110,23 +110,23 @@ export const GameShelfView: React.FC<GameShelfViewProps> = ({ games, onSelect, o
 
                   {/* Release year overlay */}
                   {game.releaseYear && (
-                    <div className="absolute bottom-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-xs text-white text-[10px] font-mono">
+                    <div className="absolute bottom-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-xs text-cyan-300 text-[9px] font-pixel">
                       {game.releaseYear}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Shelf Base illusion (wooden / dark plank rail underneath) */}
-              <div className="mt-1.5 h-2 bg-gradient-to-b from-slate-300 via-slate-400 to-slate-500 rounded-sm shadow-sm" />
-              <div className="h-1 bg-black/10 blur-[1px] -mt-0.5 mx-1" />
+              {/* Shelf Base illusion (retro arcade wood / console rack plank) */}
+              <div className="mt-1.5 h-2.5 bg-gradient-to-r from-[#2c1d11] via-[#4a331e] to-[#2c1d11] rounded-sm shadow-md border-t border-amber-900/40" />
+              <div className="h-1 bg-black/50 blur-[1px] -mt-0.5 mx-1" />
 
               {/* Title & Console caption underneath the shelf */}
               <div className="mt-1 px-1">
-                <p className="text-xs font-bold text-slate-800 truncate group-hover:text-indigo-600 transition-colors" title={game.title}>
+                <p className="text-xs font-bold text-slate-100 truncate group-hover:text-amber-300 transition-colors font-retro tracking-wide" title={game.title}>
                   {game.title}
                 </p>
-                <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                <p className="text-[10px] text-cyan-400/80 truncate mt-0.5 font-retro">
                   {game.genre || game.console}
                 </p>
               </div>

@@ -504,27 +504,27 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-hidden">
       <div
         id="add-game-modal"
-        className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:max-w-xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+        className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:max-w-xl bg-[#0f1423] text-slate-200 rounded-t-2xl sm:rounded-2xl shadow-2xl border-2 border-slate-700/80 flex flex-col overflow-hidden"
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b-2 border-slate-800 bg-gradient-to-r from-[#0b0e17] via-[#141b2d] to-[#0b0e17] shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shrink-0">
-              <Disc3 className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-sm shrink-0 font-bold border border-amber-300">
+              <Disc3 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" style={{ animationDuration: '6s' }} />
             </div>
-            <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">Ajouter un jeu vidéo</h2>
-              <p className="text-[11px] sm:text-xs text-slate-500 truncate">Par scan caméra direct ou saisie manuelle</p>
+            <div className="min-w-0 font-retro">
+              <h2 className="text-xs sm:text-sm font-pixel font-bold text-amber-300 truncate">AJOUTER UN JEU</h2>
+              <p className="text-[10px] sm:text-xs text-slate-400 truncate">Scan direct caméra ou saisie manuelle</p>
             </div>
           </div>
           <button
             id="btn-close-modal"
             type="button"
             onClick={handleClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer active:scale-95"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer active:scale-95"
             title="Fermer"
           >
             <X className="w-5 h-5" />
@@ -532,55 +532,55 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         </div>
 
         {/* Tab switcher */}
-        <div className="flex border-b border-slate-200 bg-slate-100/80 p-1.5 gap-1 shrink-0">
+        <div className="flex border-b border-slate-800 bg-[#0b0e17] p-1.5 gap-1.5 shrink-0">
           <button
             id="tab-barcode"
             type="button"
             onClick={() => setActiveTab('barcode')}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
+            className={`flex-1 py-2 text-[10px] sm:text-xs font-pixel font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
               activeTab === 'barcode'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-[#1a233a] text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
             }`}
           >
-            <Barcode className="w-4 h-4" />
-            <span>Recherche code-barres</span>
+            <Barcode className="w-3.5 h-3.5 text-cyan-400" />
+            <span>SCANNER CODE-BARRES</span>
           </button>
           <button
             id="tab-manual"
             type="button"
             onClick={() => setActiveTab('manual')}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
+            className={`flex-1 py-2 text-[10px] sm:text-xs font-pixel font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
               activeTab === 'manual'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-[#1a233a] text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
             }`}
           >
-            <PenTool className="w-4 h-4" />
-            <span>Saisie manuelle {barcode ? '(Code associé)' : ''}</span>
+            <PenTool className="w-3.5 h-3.5 text-amber-400" />
+            <span>SAISIE MANUELLE {barcode ? '(CODE LIÉ)' : ''}</span>
           </button>
         </div>
 
         {/* Feedback message */}
         {stockUpdatedSuccess ? (
-          <div className="mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border bg-emerald-50 text-emerald-900 border-emerald-300 font-medium shrink-0">
-            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border bg-emerald-950/80 text-emerald-300 border-emerald-500/50 font-medium shrink-0 font-retro">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{stockUpdatedSuccess}</span>
           </div>
         ) : lookupMessage && (
           <div
-            className={`mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-start gap-2 border shrink-0 ${
+            className={`mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-start gap-2 border shrink-0 font-retro ${
               lookupMessage.type === 'success'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                 : lookupMessage.type === 'warning'
-                ? 'bg-amber-50 text-amber-800 border-amber-200'
-                : 'bg-rose-50 text-rose-800 border-rose-200'
+                ? 'bg-amber-950/70 text-amber-200 border-amber-500/50'
+                : 'bg-rose-950/80 text-rose-200 border-rose-500/50'
             }`}
           >
             {lookupMessage.type === 'success' ? (
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             ) : (
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
             )}
             <div className="flex-1 space-y-1.5">
               <span>{lookupMessage.text}</span>
@@ -592,9 +592,9 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       onClose();
                       onOpenSettings();
                     }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100/90 hover:bg-amber-200 text-amber-900 rounded-lg font-bold text-[11px] transition cursor-pointer shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
                   >
-                    <Settings className="w-3 h-3 text-amber-700" />
+                    <Settings className="w-3 h-3 text-slate-950" />
                     <span>Ajouter votre clé API Gemini pour l'IA en ligne</span>
                   </button>
                 </div>
@@ -616,9 +616,9 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Primary Stock Match Alert Banner */}
               {primaryStockMatch && (
-                <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300/90 shadow-sm animate-fadeIn">
+                <div className="p-4 rounded-2xl bg-[#1c1809] border-2 border-amber-500/60 shadow-sm animate-fadeIn font-retro">
                   <div className="flex items-start gap-3.5">
-                    <div className="w-12 aspect-[3/4] rounded-lg bg-slate-900 overflow-hidden shrink-0 border border-amber-300 shadow flex items-center justify-center">
+                    <div className="w-12 aspect-[3/4] rounded-lg bg-slate-950 overflow-hidden shrink-0 border border-amber-400/80 shadow flex items-center justify-center">
                       {primaryStockMatch.coverUrl ? (
                         <img
                           src={primaryStockMatch.coverUrl}
@@ -633,46 +633,46 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white shadow-2xs">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-pixel font-bold uppercase tracking-wider bg-amber-400 text-slate-950 shadow-2xs">
                           <Boxes className="w-3 h-3" />
-                          Déjà en stock
+                          DÉJÀ EN STOCK
                         </span>
-                        <span className="text-xs font-bold text-amber-950 bg-amber-200/70 px-2 py-0.5 rounded-md border border-amber-300">
+                        <span className="text-xs font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-md border border-amber-500/40">
                           Stock actuel : {primaryStockMatch.quantity || 1} exemplaire{(primaryStockMatch.quantity || 1) > 1 ? 's' : ''}
                         </span>
                       </div>
 
-                      <h4 className="text-sm font-bold text-slate-900 truncate">
+                      <h4 className="text-sm font-bold text-slate-100 truncate">
                         {primaryStockMatch.title}{' '}
-                        <span className="text-slate-500 font-normal">({primaryStockMatch.console})</span>
+                        <span className="text-slate-400 font-normal">({primaryStockMatch.console})</span>
                       </h4>
-                      <p className="text-xs text-slate-600 mt-0.5">
-                        État : <span className="font-semibold text-slate-800">{CONDITION_LABELS[primaryStockMatch.condition]?.label || primaryStockMatch.condition}</span>
-                        {primaryStockMatch.barcode && <span> • Code : <code className="font-mono">{primaryStockMatch.barcode}</code></span>}
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        État : <span className="font-semibold text-amber-300">{CONDITION_LABELS[primaryStockMatch.condition]?.label || primaryStockMatch.condition}</span>
+                        {primaryStockMatch.barcode && <span> • Code : <code className="font-mono text-cyan-300">{primaryStockMatch.barcode}</code></span>}
                       </p>
                     </div>
                   </div>
 
                   {/* Stock Update Controls */}
                   {onUpdateQuantity && (
-                    <div className="mt-3 pt-3 border-t border-amber-200 flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="mt-3 pt-3 border-t border-amber-500/30 flex flex-wrap items-center justify-between gap-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-amber-900">Quantité à ajouter :</span>
-                        <div className="inline-flex items-center bg-white border border-amber-300 rounded-lg shadow-2xs overflow-hidden">
+                        <span className="text-xs font-semibold text-amber-200">Quantité à ajouter :</span>
+                        <div className="inline-flex items-center bg-[#0c101c] border border-amber-400/50 rounded-lg shadow-2xs overflow-hidden">
                           <button
                             type="button"
                             onClick={() => setQuantityToAdd(Math.max(1, quantityToAdd - 1))}
-                            className="px-2.5 py-1 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer"
+                            className="px-2.5 py-1 text-slate-300 hover:bg-slate-800 font-bold text-xs cursor-pointer"
                           >
                             -
                           </button>
-                          <span className="px-2.5 py-1 text-xs font-black text-slate-900 font-mono">
+                          <span className="px-2.5 py-1 text-xs font-black text-amber-300 font-mono">
                             +{quantityToAdd}
                           </span>
                           <button
                             type="button"
                             onClick={() => setQuantityToAdd(quantityToAdd + 1)}
-                            className="px-2.5 py-1 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer"
+                            className="px-2.5 py-1 text-slate-300 hover:bg-slate-800 font-bold text-xs cursor-pointer"
                           >
                             +
                           </button>
@@ -682,7 +682,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleIncrementStock(primaryStockMatch)}
-                        className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 cursor-pointer transition"
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold font-pixel shadow-sm flex items-center gap-1.5 cursor-pointer transition"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         Mettre à jour le stock (Passer à {(primaryStockMatch.quantity || 1) + quantityToAdd} ex.)
@@ -694,12 +694,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
               {/* Cross-Console Matches Pill */}
               {crossConsoleMatches.length > 0 && (
-                <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200/80 text-xs text-indigo-900 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                <div className="p-2.5 rounded-xl bg-[#131929] border border-cyan-500/30 text-xs text-cyan-200 flex items-center gap-2 font-retro">
+                  <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
                   <span>
                     Également en stock sur :{' '}
                     {crossConsoleMatches.map((m, idx) => (
-                      <strong key={m.id} className="font-semibold">
+                      <strong key={m.id} className="font-semibold text-amber-300">
                         {m.console} ({m.quantity || 1} ex.){idx < crossConsoleMatches.length - 1 ? ', ' : ''}
                       </strong>
                     ))}
@@ -708,16 +708,16 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
               )}
 
               {/* Title & AI Autofill */}
-              <div>
+              <div className="font-retro">
                 <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="game-title" className="text-xs font-bold text-slate-700">
-                    Nom du jeu *
+                  <label htmlFor="game-title" className="text-xs font-bold font-pixel text-slate-300">
+                    NOM DU JEU *
                   </label>
                   <button
                     type="button"
                     onClick={handleAiEnrich}
                     disabled={!title.trim() || isSearching}
-                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     Compléter avec l'IA
@@ -730,24 +730,24 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                   placeholder="Ex: Super Mario Odyssey, Elden Ring..."
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  className="w-full px-3.5 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                 />
               </div>
 
               {/* Console selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-retro">
                 <div>
-                  <label htmlFor="game-console" className="block text-xs font-bold text-slate-700 mb-1">
-                    Console / Plateforme *
+                  <label htmlFor="game-console" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    CONSOLE / PLATEFORME *
                   </label>
                   <select
                     id="game-console"
                     value={consoleName}
                     onChange={(e) => setConsoleName(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 cursor-pointer"
                   >
                     {CONSOLE_LIST.map((c) => (
-                      <option key={c} value={c}>
+                      <option key={c} value={c} className="bg-[#151c2e] text-slate-100">
                         {c}
                       </option>
                     ))}
@@ -756,8 +756,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
                 {consoleName === 'Autre' ? (
                   <div>
-                    <label htmlFor="custom-console" className="block text-xs font-bold text-slate-700 mb-1">
-                      Nom de la console
+                    <label htmlFor="custom-console" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                      NOM DE LA CONSOLE
                     </label>
                     <input
                       id="custom-console"
@@ -765,13 +765,13 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       placeholder="Ex: Atari 2600, Neo-Geo..."
                       value={customConsole}
                       onChange={(e) => setCustomConsole(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                     />
                   </div>
                 ) : (
                   <div>
-                    <label htmlFor="game-year" className="block text-xs font-bold text-slate-700 mb-1">
-                      Année de sortie
+                    <label htmlFor="game-year" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                      ANNÉE DE SORTIE
                     </label>
                     <input
                       id="game-year"
@@ -781,29 +781,29 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       placeholder="Ex: 2021"
                       value={releaseYear}
                       onChange={(e) => setReleaseYear(e.target.value ? parseInt(e.target.value, 10) : '')}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                     />
                   </div>
                 )}
               </div>
 
               {/* Barcode & Genre */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-retro">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label htmlFor="game-barcode" className="text-xs font-bold text-slate-700">
-                      Code-barres (EAN / UPC)
+                    <label htmlFor="game-barcode" className="text-xs font-bold font-pixel text-slate-300">
+                      CODE-BARRES (EAN/UPC)
                     </label>
                     {barcode.replace(/\D/g, '').length >= 6 && (
                       <button
                         type="button"
                         onClick={() => handleBarcodeDetected(barcode)}
                         disabled={isSearching}
-                        className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                        className="text-[10px] text-cyan-400 hover:text-cyan-300 font-pixel font-bold flex items-center gap-1 cursor-pointer"
                         title="Rechercher directement à partir de ce code-barres"
                       >
                         <Search className="w-3 h-3" />
-                        <span>Identifier le jeu</span>
+                        <span>Identifier</span>
                       </button>
                     )}
                   </div>
@@ -811,7 +811,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     <input
                       id="game-barcode"
                       type="text"
-                      placeholder="Ex: 5030932111822 ou 0045496420079"
+                      placeholder="Ex: 5030932111822..."
                       value={barcode}
                       onChange={(e) => setBarcode(e.target.value)}
                       onKeyDown={(e) => {
@@ -822,26 +822,26 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                           }
                         }
                       }}
-                      className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="flex-1 px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm font-mono text-cyan-300 focus:outline-none focus:border-amber-400"
                     />
                     <button
                       type="button"
                       onClick={() => handleBarcodeDetected(barcode)}
                       disabled={isSearching || barcode.replace(/\D/g, '').length < 6}
-                      className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-amber-300 font-pixel text-[10px] rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0"
                       title="Identifier automatiquement le jeu avec ce code-barres"
                     >
                       <Search className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Identifier</span>
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-slate-400 mt-1">
                     Tapez ou collez un code et cliquez sur Identifier pour trouver le jeu sans taper le titre.
                   </p>
                 </div>
                 <div>
-                  <label htmlFor="game-genre" className="block text-xs font-bold text-slate-700 mb-1">
-                    Genre
+                  <label htmlFor="game-genre" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    GENRE
                   </label>
                   <input
                     id="game-genre"
@@ -849,16 +849,16 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     placeholder="Ex: Action-RPG, Plateforme..."
                     value={genre}
                     onChange={(e) => setGenre(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                   />
                 </div>
               </div>
 
               {/* Publisher & Developer */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-retro">
                 <div>
-                  <label htmlFor="game-publisher" className="block text-xs font-bold text-slate-700 mb-1">
-                    Éditeur
+                  <label htmlFor="game-publisher" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    ÉDITEUR
                   </label>
                   <input
                     id="game-publisher"
@@ -866,12 +866,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     placeholder="Ex: Nintendo, Sony, Capcom..."
                     value={publisher}
                     onChange={(e) => setPublisher(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                   />
                 </div>
                 <div>
-                  <label htmlFor="game-developer" className="block text-xs font-bold text-slate-700 mb-1">
-                    Développeur
+                  <label htmlFor="game-developer" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    DÉVELOPPEUR
                   </label>
                   <input
                     id="game-developer"
@@ -879,56 +879,56 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     placeholder="Ex: FromSoftware, Square Enix..."
                     value={developer}
                     onChange={(e) => setDeveloper(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                   />
                 </div>
               </div>
 
               {/* Condition, Status & Quantity */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-retro">
                 <div>
-                  <label htmlFor="game-condition" className="block text-xs font-bold text-slate-700 mb-1">
-                    État physique
+                  <label htmlFor="game-condition" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    ÉTAT PHYSIQUE
                   </label>
                   <select
                     id="game-condition"
                     value={condition}
                     onChange={(e) => setCondition(e.target.value as GameCondition)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-400 cursor-pointer"
                   >
                     {Object.entries(CONDITION_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>
+                      <option key={k} value={k} className="bg-[#151c2e] text-slate-100">
                         {v.label}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="game-status" className="block text-xs font-bold text-slate-700 mb-1">
-                    Statut
+                  <label htmlFor="game-status" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    STATUT
                   </label>
                   <select
                     id="game-status"
                     value={status}
                     onChange={(e) => setStatus(e.target.value as GameStatus)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-400 cursor-pointer"
                   >
                     {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>
+                      <option key={k} value={k} className="bg-[#151c2e] text-slate-100">
                         {v.label}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="game-quantity" className="block text-xs font-bold text-slate-700 mb-1">
-                    Quantité
+                  <label htmlFor="game-quantity" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    QUANTITÉ
                   </label>
-                  <div className="flex items-center bg-slate-50 border border-slate-300 rounded-xl overflow-hidden h-[38px]">
+                  <div className="flex items-center bg-[#151c2e] border border-slate-700 rounded-xl overflow-hidden h-[38px]">
                     <button
                       type="button"
                       onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="px-3 h-full text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                      className="px-3 h-full text-slate-300 hover:bg-slate-800 font-bold cursor-pointer"
                     >
                       -
                     </button>
@@ -938,12 +938,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       min={1}
                       value={quantity}
                       onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full text-center bg-transparent font-bold text-slate-900 text-sm focus:outline-none"
+                      className="w-full text-center bg-transparent font-bold text-amber-300 text-sm focus:outline-none font-mono"
                     />
                     <button
                       type="button"
                       onClick={() => setQuantity(quantity + 1)}
-                      className="px-3 h-full text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                      className="px-3 h-full text-slate-300 hover:bg-slate-800 font-bold cursor-pointer"
                     >
                       +
                     </button>
@@ -952,12 +952,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
               </div>
 
               {/* Cote Argus d'occasion & Prix d'achat */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200/80">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-[#0e2118] rounded-2xl border border-emerald-500/40 font-retro">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label htmlFor="game-estimated-value" className="block text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                      <Coins className="w-3.5 h-3.5 text-emerald-600" />
-                      Cote occasion estimée (€)
+                    <label htmlFor="game-estimated-value" className="block text-xs font-bold font-pixel text-emerald-300 flex items-center gap-1.5">
+                      <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                      COTE OCCASION (€)
                     </label>
                     <button
                       type="button"
@@ -965,7 +965,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                         const val = estimateMarketValue(title, finalConsole, condition);
                         setEstimatedValue(val);
                       }}
-                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                      className="text-[10px] font-pixel font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
                     >
                       Estimer auto
                     </button>
@@ -979,18 +979,18 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       placeholder={title ? `${estimateMarketValue(title, finalConsole, condition)} € (auto)` : 'ex: 35'}
                       value={estimatedValue}
                       onChange={(e) => setEstimatedValue(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0))}
-                      className="w-full pl-3 pr-8 py-2 bg-white border border-emerald-300/80 rounded-xl text-sm font-mono font-bold text-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-3 pr-8 py-2 bg-[#0c1813] border border-emerald-500/50 rounded-xl text-sm font-mono font-bold text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
-                    <span className="absolute right-3 top-2 text-xs font-bold text-emerald-700">€</span>
+                    <span className="absolute right-3 top-2 text-xs font-bold text-emerald-400 font-mono">€</span>
                   </div>
-                  <span className="text-[10px] text-emerald-800/80 mt-1 block">
-                    Argus Mister Game Price & Ventes réelles eBay France (PAL FR)
+                  <span className="text-[10px] text-emerald-200/80 mt-1 block">
+                    Argus Mister Game Price & Ventes eBay France (PAL FR)
                   </span>
                 </div>
 
                 <div>
-                  <label htmlFor="game-purchase-price" className="block text-xs font-bold text-slate-700 mb-1">
-                    Prix d'achat payé (€) <span className="text-slate-400 font-normal">(optionnel)</span>
+                  <label htmlFor="game-purchase-price" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                    PRIX PAYÉ (€) <span className="text-slate-400 font-normal font-retro">(optionnel)</span>
                   </label>
                   <div className="relative">
                     <input
@@ -1001,17 +1001,17 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       placeholder="ex: 20"
                       value={purchasePrice}
                       onChange={(e) => setPurchasePrice(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0))}
-                      className="w-full pl-3 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full pl-3 pr-8 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm font-mono text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                     />
-                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">€</span>
+                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400 font-mono">€</span>
                   </div>
                 </div>
               </div>
 
               {/* Rating */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Note personnelle : {rating}/5
+              <div className="font-retro">
+                <label className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                  NOTE PERSONNELLE : {rating}/5
                 </label>
                 <div className="flex gap-2 items-center">
                   {[1, 2, 3, 4, 5].map((star) => (
@@ -1020,7 +1020,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       type="button"
                       onClick={() => setRating(star)}
                       className={`text-xl transition cursor-pointer ${
-                        star <= rating ? 'text-amber-400 scale-110' : 'text-slate-200 hover:text-amber-300'
+                        star <= rating ? 'text-amber-400 scale-110' : 'text-slate-700 hover:text-amber-300'
                       }`}
                     >
                       ★
@@ -1030,9 +1030,9 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
               </div>
 
               {/* Notes */}
-              <div>
-                <label htmlFor="game-notes" className="block text-xs font-bold text-slate-700 mb-1">
-                  Notes ou description
+              <div className="font-retro">
+                <label htmlFor="game-notes" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
+                  NOTES OU DESCRIPTION
                 </label>
                 <textarea
                   id="game-notes"
@@ -1040,24 +1040,24 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                   placeholder="Notes, édition collector, souvenirs..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  className="w-full px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 resize-none"
                 />
               </div>
 
               {/* Cover URL with live preview and auto-search */}
-              <div>
+              <div className="font-retro">
                 <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="game-cover" className="text-xs font-bold text-slate-700">
-                    Jaquette du jeu (Box Art)
+                  <label htmlFor="game-cover" className="text-xs font-bold font-pixel text-slate-300">
+                    JAQUETTE DU JEU (BOX ART)
                   </label>
                   <button
                     type="button"
                     onClick={handleFetchCover}
                     disabled={!title.trim() || isSearching}
-                    className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    Rechercher la jaquette
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    Rechercher jaquette
                   </button>
                 </div>
 
@@ -1068,10 +1068,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     placeholder="URL de la jaquette ou cliquez sur Rechercher..."
                     value={coverUrl}
                     onChange={(e) => setCoverUrl(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-1 px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                   />
                   {coverUrl && (
-                    <div className="w-12 h-16 rounded-lg bg-slate-950 overflow-hidden shrink-0 border border-slate-300 shadow-sm relative flex items-center justify-center">
+                    <div className="w-12 h-16 rounded-lg bg-slate-950 overflow-hidden shrink-0 border-2 border-amber-400/80 shadow-sm relative flex items-center justify-center">
                       <img
                         src={getSafeCoverUrl(coverUrl)}
                         alt="Aperçu jaquette"
@@ -1090,11 +1090,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
               </div>
 
               {/* Action buttons */}
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  className="px-4 py-2 text-xs font-bold font-pixel text-slate-400 hover:text-slate-200 transition cursor-pointer"
                 >
                   Annuler
                 </button>
@@ -1102,10 +1102,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                   id="btn-submit-game"
                   type="submit"
                   disabled={!title.trim()}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2.5 text-xs font-bold font-pixel text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
-                  Ajouter à ma collection
+                  AJOUTER AU CATALOGUE
                 </button>
               </div>
             </form>

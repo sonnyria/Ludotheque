@@ -186,24 +186,24 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
       {!isSubSection && games.length > 0 && (
         <div
           id="cote-argus-summary"
-          className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs space-y-3"
+          className="bg-[#121727]/90 rounded-2xl border-2 border-emerald-500/30 p-3.5 sm:p-4 shadow-xl shadow-black/40 space-y-3"
         >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
             {/* Cote Totale Highlight */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
                 <Coins className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <span className="text-[11px] font-bold font-pixel text-slate-400 uppercase tracking-wider">
                     Cote Totale Argus
                   </span>
-                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60">
+                  <span className="text-[9px] font-bold font-pixel text-emerald-300 bg-emerald-950/90 px-1.5 py-0.5 rounded border border-emerald-500/40">
                     {games.length} jeu{games.length > 1 ? 'x' : ''} • {totalCopies} ex.
                   </span>
                 </div>
-                <div className="text-xl sm:text-2xl font-black font-mono text-emerald-950 tracking-tight">
+                <div className="text-xl sm:text-2xl font-black font-pixel text-emerald-400 tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                   {totalCote.toLocaleString('fr-FR')} €
                 </div>
               </div>
@@ -214,20 +214,20 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsUpdateModalOpen(true)}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                className="btn-retro-arcade px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 border-t border-x border-emerald-400 border-b-emerald-900 text-slate-950 rounded-xl text-xs font-bold font-retro flex items-center gap-1.5 shadow-sm transition cursor-pointer active:translate-y-0.5"
                 title="Mettre à jour les cotes ou ajuster les prix"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Mettre à jour les prix</span>
+                <RefreshCw className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="font-black">Mettre à jour les prix</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowSourceBanner((prev) => !prev)}
-                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                className="btn-retro-arcade px-2.5 py-1.5 bg-[#1a2133] hover:bg-[#232c44] border-t border-x border-slate-700 border-b-slate-950 text-slate-300 rounded-xl text-xs font-semibold font-retro flex items-center gap-1 transition cursor-pointer active:translate-y-0.5"
                 title="Afficher les informations sur les sources PriceCharting & Mister Game Price"
               >
-                <Info className="w-3.5 h-3.5 text-emerald-600" />
+                <Info className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Source : PriceCharting</span>
               </button>
             </div>
@@ -282,7 +282,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                   <div
                     key={item.consoleName}
                     onClick={() => onSelectConsole && onSelectConsole(item.consoleName)}
-                    className={`flex items-center justify-between p-2 rounded-xl border bg-slate-50/60 hover:bg-indigo-50/40 hover:border-indigo-200 transition-colors text-xs ${
+                    className={`flex items-center justify-between p-2 rounded-xl border border-slate-700/70 bg-[#161e31] hover:bg-[#1f2b45] hover:border-amber-400/50 transition-colors text-xs ${
                       onSelectConsole ? 'cursor-pointer' : ''
                     }`}
                     title={`${item.consoleName} : ${item.totalValue} € (${item.count} jeux, ${item.copies} exemplaires)`}
@@ -292,16 +292,16 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                         className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: item.theme.accentColor }}
                       />
-                      <span className="font-bold text-slate-800 truncate text-[11px]">
+                      <span className="font-bold text-slate-200 truncate text-[11px] font-retro">
                         {item.consoleName}
                       </span>
                     </div>
 
                     <div className="text-right shrink-0 ml-2">
-                      <span className="font-black font-mono text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-1.5 py-0.5 rounded text-[11px]">
+                      <span className="font-bold font-pixel text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px]">
                         {item.totalValue.toLocaleString('fr-FR')} €
                       </span>
-                      <span className="block text-[9px] text-slate-400">
+                      <span className="block text-[9px] text-slate-400 font-retro">
                         {item.count} j. ({item.percent}%)
                       </span>
                     </div>
@@ -313,18 +313,18 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
         </div>
       )}
 
-      {/* 2. Interactive Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* 2. Interactive Data Table with 80's / 90's styling */}
+      <div className="bg-[#121727]/90 rounded-2xl border-2 border-slate-800 shadow-xl shadow-black/40 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+            <thead className="bg-[#182238] border-b-2 border-slate-800 text-amber-300 font-bold font-pixel tracking-wider text-[10px]">
               <tr>
                 <th className="py-3 px-3 w-12 text-center">Aperçu</th>
 
                 {/* Titre (sortable) */}
                 <th
                   onClick={() => handleSort('title')}
-                  className="py-3 px-4 cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group select-none"
                 >
                   <div className="flex items-center gap-1.5">
                     <span>Titre</span>
@@ -335,7 +335,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                 {/* Console (sortable) */}
                 <th
                   onClick={() => handleSort('console')}
-                  className="py-3 px-4 cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group select-none"
                 >
                   <div className="flex items-center gap-1.5">
                     <span>Console</span>
@@ -346,7 +346,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                 {/* Stock / Qté (sortable) */}
                 <th
                   onClick={() => handleSort('quantity')}
-                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group select-none"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Stock</span>
@@ -357,7 +357,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                 {/* Année (sortable) */}
                 <th
                   onClick={() => handleSort('releaseYear')}
-                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group select-none"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Année</span>
@@ -372,11 +372,11 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                 {/* Cote Occasion (sortable, prominent) */}
                 <th
                   onClick={() => handleSort('value')}
-                  className="py-3 px-3 text-right cursor-pointer bg-emerald-50/40 hover:bg-emerald-100/40 text-emerald-900 border-x border-emerald-100 transition-colors group select-none"
+                  className="py-3 px-3 text-right cursor-pointer bg-emerald-950/70 hover:bg-emerald-900/70 text-emerald-300 border-x border-emerald-500/30 transition-colors group select-none"
                   title="Trier par valeur de la cote estimée"
                 >
                   <div className="flex items-center justify-end gap-1.5">
-                    <Coins className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <Coins className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     <span>Cote Occasion</span>
                     {renderSortIndicator('value')}
                   </div>
@@ -387,7 +387,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                 {/* Note (sortable) */}
                 <th
                   onClick={() => handleSort('rating')}
-                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-100/70 transition-colors group select-none"
+                  className="py-3 px-3 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group select-none"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Note</span>
@@ -399,7 +399,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-slate-800/80 text-slate-300">
               {sortedGames.map((game) => {
                 const theme = getConsoleTheme(game.console);
                 const conditionInfo = CONDITION_LABELS[game.condition] || { label: game.condition };
@@ -413,11 +413,11 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     key={game.id}
                     id={`game-row-${game.id}`}
                     onClick={() => onSelect(game)}
-                    className="hover:bg-indigo-50/40 transition-colors cursor-pointer"
+                    className="hover:bg-[#1a233b] transition-colors cursor-pointer"
                   >
                     {/* Miniature */}
                     <td className="py-2 px-3 text-center">
-                      <div className="w-9 h-11 rounded bg-slate-900 mx-auto overflow-hidden border border-slate-200/70 shrink-0 flex items-center justify-center shadow-2xs">
+                      <div className="w-9 h-11 rounded bg-slate-950 mx-auto overflow-hidden border border-slate-700/80 shrink-0 flex items-center justify-center shadow-xs">
                         {game.coverUrl ? (
                           <img
                             src={game.coverUrl}
@@ -435,12 +435,12 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     </td>
 
                     {/* Title & publisher */}
-                    <td className="py-2 px-4 font-bold text-slate-900 max-w-xs">
-                      <span className="hover:text-indigo-600 transition-colors line-clamp-1">
+                    <td className="py-2 px-4 font-bold text-slate-100 max-w-xs font-retro">
+                      <span className="hover:text-amber-300 transition-colors line-clamp-1 text-xs">
                         {game.title}
                       </span>
                       {game.publisher && (
-                        <span className="block text-[11px] font-normal text-slate-400 truncate">
+                        <span className="block text-[10px] font-normal text-slate-400 truncate mt-0.5">
                           {game.publisher}
                         </span>
                       )}
@@ -449,7 +449,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     {/* Console */}
                     <td className="py-2 px-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${theme.bgBadge} ${theme.borderBadge}`}
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold font-pixel border ${theme.bgBadge} ${theme.borderBadge}`}
                       >
                         {game.console}
                       </span>
@@ -458,10 +458,10 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     {/* Stock Quantity */}
                     <td className="py-2 px-3 text-center whitespace-nowrap">
                       <span
-                        className={`px-2 py-0.5 rounded-md text-xs font-bold font-mono ${
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold font-pixel ${
                           qty > 1
-                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                            : 'bg-slate-100 text-slate-700'
+                            ? 'bg-amber-400 text-slate-950 shadow-xs'
+                            : 'bg-slate-800 text-slate-300 border border-slate-700/60'
                         }`}
                       >
                         {qty}
@@ -469,37 +469,37 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     </td>
 
                     {/* Year */}
-                    <td className="py-2 px-3 text-center whitespace-nowrap font-mono text-slate-600">
+                    <td className="py-2 px-3 text-center whitespace-nowrap font-pixel text-[10px] text-cyan-300">
                       {game.releaseYear || '-'}
                     </td>
 
                     {/* Barcode */}
-                    <td className="py-2 px-4 whitespace-nowrap font-mono text-[11px]">
+                    <td className="py-2 px-4 whitespace-nowrap font-mono text-[10px]">
                       {game.barcode ? (
-                        <span className="inline-flex items-center gap-1 text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                          <Barcode className="w-3 h-3 text-slate-400" />
+                        <span className="inline-flex items-center gap-1 text-slate-300 bg-[#182136] border border-slate-700/70 px-1.5 py-0.5 rounded">
+                          <Barcode className="w-3 h-3 text-amber-400" />
                           {game.barcode}
                         </span>
                       ) : (
-                        <span className="text-slate-300">-</span>
+                        <span className="text-slate-600">-</span>
                       )}
                     </td>
 
                     {/* Genre */}
-                    <td className="py-2 px-4 whitespace-nowrap text-slate-600">
+                    <td className="py-2 px-4 whitespace-nowrap text-slate-400 font-retro text-xs">
                       {game.genre || '-'}
                     </td>
 
                     {/* Condition */}
                     <td className="py-2 px-3 text-center whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">
+                      <span className="px-1.5 py-0.5 rounded bg-[#182136] border border-slate-700/70 text-cyan-300 text-[10px] font-retro">
                         {conditionInfo.label}
                       </span>
                     </td>
 
                     {/* Cote Occasion (Game specific cote) with inline editing and PriceCharting lookup */}
                     <td
-                      className="py-2 px-3 text-right whitespace-nowrap bg-emerald-50/20 border-x border-emerald-100/60"
+                      className="py-2 px-3 text-right whitespace-nowrap bg-emerald-950/40 border-x border-emerald-500/20"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {editingPriceGameId === game.id ? (
@@ -514,13 +514,13 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                               if (e.key === 'Escape') setEditingPriceGameId(null);
                             }}
                             autoFocus
-                            className="w-16 px-1.5 py-0.5 bg-white border border-emerald-500 rounded font-mono font-bold text-xs text-right text-emerald-950 shadow-inner focus:outline-none"
+                            className="w-16 px-1.5 py-0.5 bg-[#0a1810] border border-emerald-500 rounded font-pixel font-bold text-xs text-right text-emerald-300 shadow-inner focus:outline-none"
                           />
-                          <span className="text-xs font-bold text-emerald-900 font-mono">€</span>
+                          <span className="text-xs font-bold text-emerald-400 font-pixel">€</span>
                           <button
                             type="button"
                             onClick={() => handleSavePrice(game.id)}
-                            className="p-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-2xs"
+                            className="p-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-2xs"
                             title="Enregistrer ce prix"
                           >
                             <Check className="w-3 h-3" />
@@ -528,7 +528,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                           <button
                             type="button"
                             onClick={() => setEditingPriceGameId(null)}
-                            className="p-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 cursor-pointer"
+                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
                             title="Annuler"
                           >
                             <X className="w-3 h-3" />
@@ -540,7 +540,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                                 onResetGamePrice(game.id);
                                 setEditingPriceGameId(null);
                               }}
-                              className="px-1.5 py-0.5 text-[10px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded font-semibold cursor-pointer"
+                              className="px-1.5 py-0.5 text-[9px] bg-emerald-900/90 hover:bg-emerald-800 text-emerald-300 rounded font-pixel cursor-pointer border border-emerald-600/50"
                               title="Réinitialiser à la cote auto PriceCharting"
                             >
                               Auto
@@ -555,7 +555,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                                 setEditingPriceGameId(game.id);
                                 setTempPrice(unitEstimatedValue);
                               }}
-                              className="font-black font-mono text-emerald-900 bg-emerald-50 border border-emerald-200/80 hover:border-emerald-400 hover:bg-emerald-100/50 px-2 py-0.5 rounded text-xs shadow-2xs cursor-pointer transition"
+                              className="font-bold font-pixel text-emerald-400 bg-[#0c2217] border border-emerald-500/50 hover:border-emerald-400 hover:bg-[#122e1f] px-2 py-0.5 rounded text-[10px] shadow-2xs cursor-pointer transition"
                               title="Cliquer pour modifier directement ce prix"
                             >
                               {unitEstimatedValue} €
@@ -569,7 +569,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                                   setEditingPriceGameId(game.id);
                                   setTempPrice(unitEstimatedValue);
                                 }}
-                                className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-100/60 transition cursor-pointer"
+                                className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-emerald-950/60 transition cursor-pointer"
                                 title="Modifier manuellement la cote de ce jeu"
                               >
                                 <Pencil className="w-3 h-3" />
@@ -581,7 +581,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                               href={getPriceChartingSearchUrl(game.title, game.console)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-emerald-100/60 transition cursor-pointer"
+                              className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-emerald-950/60 transition cursor-pointer"
                               title={`Consulter la cote sur PriceCharting.com (${game.title})`}
                             >
                               <ExternalLink className="w-3 h-3" />
@@ -591,14 +591,14 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                           <div className="flex items-center gap-1 mt-0.5">
                             {game.estimatedValue !== undefined && (
                               <span
-                                className="text-[9px] font-semibold text-indigo-700 bg-indigo-50 px-1 rounded border border-indigo-200/50"
+                                className="text-[8px] font-bold font-pixel text-cyan-300 bg-cyan-950/90 px-1 rounded border border-cyan-500/40"
                                 title="Prix personnalisé manuellement"
                               >
-                                prix fixé
+                                FIXÉ
                               </span>
                             )}
                             {qty > 1 && (
-                              <span className="text-[10px] text-emerald-700 font-mono font-medium">
+                              <span className="text-[9px] text-emerald-400 font-pixel">
                                 Total: {lineTotalValue} € ({qty} ex.)
                               </span>
                             )}
@@ -610,21 +610,21 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     {/* Status */}
                     <td className="py-2 px-3 text-center whitespace-nowrap">
                       <span
-                        className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${statusInfo.color}`}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold font-pixel border ${statusInfo.color}`}
                       >
                         {statusInfo.label}
                       </span>
                     </td>
 
                     {/* Rating */}
-                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                    <td className="py-2 px-3 text-center whitespace-nowrap font-pixel text-[10px]">
                       {game.rating && game.rating > 0 ? (
-                        <span className="inline-flex items-center gap-0.5 text-amber-500 font-bold">
+                        <span className="inline-flex items-center gap-0.5 text-amber-400">
                           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                           {game.rating}
                         </span>
                       ) : (
-                        <span className="text-slate-300">-</span>
+                        <span className="text-slate-600">-</span>
                       )}
                     </td>
 
@@ -638,7 +638,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                             e.stopPropagation();
                             onSelect(game);
                           }}
-                          className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-cyan-950/50 transition cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
@@ -646,7 +646,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                           type="button"
                           title="Supprimer ce jeu"
                           onClick={(e) => onDelete(game.id, e)}
-                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/50 transition cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -658,26 +658,26 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
             </tbody>
 
             {/* 3. Table Footer: Grand Total Row */}
-            <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-bold text-slate-900">
+            <tfoot className="bg-[#101524] border-t-2 border-slate-700 font-bold text-slate-200 font-pixel text-[10px]">
               <tr>
                 <td colSpan={3} className="py-3 px-4 text-left">
-                  <span className="text-xs uppercase tracking-wider text-slate-600">
-                    Total : {games.length} jeu{games.length > 1 ? 'x' : ''}
+                  <span className="uppercase tracking-wider text-amber-300">
+                    TOTAL : {games.length} JEU{games.length > 1 ? 'X' : ''}
                   </span>
                 </td>
-                <td className="py-3 px-3 text-center font-mono text-xs">
-                  <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800">
+                <td className="py-3 px-3 text-center">
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
                     {totalCopies} ex.
                   </span>
                 </td>
                 <td colSpan={4}></td>
                 {/* Total Cote Col */}
-                <td className="py-3 px-3 text-right bg-emerald-100/70 border-x border-emerald-200">
+                <td className="py-3 px-3 text-right bg-emerald-950/80 border-x border-emerald-500/30">
                   <div className="flex flex-col items-end">
-                    <span className="text-[10px] uppercase tracking-wider text-emerald-800 font-extrabold">
-                      Cote totale
+                    <span className="text-[9px] uppercase tracking-wider text-emerald-400 font-pixel">
+                      COTE TOTALE
                     </span>
-                    <span className="text-sm font-black font-mono text-emerald-950">
+                    <span className="text-sm font-black font-pixel text-emerald-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                       {totalCote.toLocaleString('fr-FR')} €
                     </span>
                   </div>

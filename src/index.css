@@ -1,5 +1,73 @@
 @import "tailwindcss";
 
+/* 80's & 90's Retro Gaming Typography Utilities */
+.font-arcade {
+  font-family: 'Press Start 2P', monospace;
+  letter-spacing: -0.05em;
+}
+
+.font-pixel {
+  font-family: 'Silkscreen', 'Press Start 2P', monospace;
+  letter-spacing: 0.02em;
+}
+
+.font-crt {
+  font-family: 'VT323', monospace;
+  letter-spacing: 0.05em;
+}
+
+.font-retro {
+  font-family: 'Chakra Petch', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* 80's Arcade Grid Pattern */
+.bg-arcade-grid {
+  background-color: #0b0f19;
+  background-image: 
+    linear-gradient(to right, rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Subtle 90's CRT Scanlines overlay */
+.retro-scanlines {
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 3px, 6px 100%;
+}
+
+/* 16-Bit Beveled Arcade Push Buttons */
+.btn-retro-arcade {
+  position: relative;
+  border-bottom-width: 3px !important;
+  transition: all 0.1s ease-in-out;
+}
+
+.btn-retro-arcade:active {
+  border-bottom-width: 1px !important;
+  transform: translateY(2px);
+}
+
+/* Retro Pixel Glow Accents */
+.glow-amber {
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.35);
+}
+
+.glow-magenta {
+  box-shadow: 0 0 14px rgba(236, 72, 153, 0.35);
+}
+
 /* Html5Qrcode video & scanner responsive fixes for smartphones */
 #interactive-barcode-viewport {
   width: 100% !important;
@@ -26,7 +94,7 @@
 }
 
 #interactive-barcode-viewport #qr-shaded-region {
-  border-color: rgba(99, 102, 241, 0.5) !important;
+  border-color: rgba(245, 158, 11, 0.7) !important;
 }
 
 /* Smooth laser scanner beam animation */

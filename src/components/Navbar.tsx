@@ -16,40 +16,43 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenGuide,
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3">
-        {/* Brand */}
+    <header className="sticky top-0 z-30 bg-[#0f1422]/95 backdrop-blur-md border-b-2 border-indigo-900/60 shadow-lg shadow-black/40">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-15 sm:h-16 flex items-center justify-between gap-3">
+        {/* Brand: RetroArgus 80's/90's */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-700 via-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
-            <Gamepad2 className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 via-rose-600 to-indigo-700 text-white flex items-center justify-center shadow-md shadow-rose-600/30 ring-2 ring-amber-400/40 shrink-0">
+            <Gamepad2 className="w-5 h-5 text-amber-200" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-lg font-black text-slate-900 tracking-tight truncate">
-                Ludothèque
+              <h1 className="text-base sm:text-lg font-black tracking-wider text-amber-400 font-pixel drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] truncate">
+                RetroArgus
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                {totalGames} {totalGames > 1 ? 'jeux' : 'jeu'}
+              <span className="px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold font-pixel bg-indigo-950 text-cyan-300 border border-cyan-500/40 shadow-xs">
+                {totalGames} {totalGames > 1 ? 'JEUX' : 'JEU'}
               </span>
             </div>
+            <p className="text-[10px] sm:text-[11px] font-retro text-slate-400 hidden sm:block tracking-wide">
+              Argus & Gestionnaire de Collection 80's & 90's
+            </p>
           </div>
         </div>
 
-        {/* Header Actions */}
+        {/* Header Actions: Retro Arcade Buttons */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Guide & Paramètres (Clé API) button */}
           <button
             id="btn-open-guide"
             type="button"
             onClick={onOpenGuide}
-            className="px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200/70 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="btn-retro-arcade px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-bold text-slate-200 hover:text-amber-300 bg-[#1a2133] hover:bg-[#232c44] border-t border-x border-slate-700 border-b-slate-950 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm active:translate-y-0.5"
             title="Paramètres, Clé API & Guide"
           >
             <div className="relative flex items-center justify-center">
-              <HelpCircle className="w-4 h-4 text-indigo-600" />
-              <Settings className="w-2.5 h-2.5 text-slate-600 absolute -bottom-1 -right-1 bg-white rounded-full ring-1 ring-slate-200" />
+              <HelpCircle className="w-4 h-4 text-amber-400" />
+              <Settings className="w-2.5 h-2.5 text-cyan-400 absolute -bottom-1 -right-1 bg-[#1a2133] rounded-full ring-1 ring-slate-700" />
             </div>
-            <span className="hidden sm:inline">Paramètres & Aide</span>
+            <span className="hidden sm:inline font-retro">Paramètres & Aide</span>
           </button>
 
           {/* Stats button */}
@@ -57,11 +60,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="btn-open-stats"
             type="button"
             onClick={onOpenStats}
-            className="hidden xs:flex p-1.5 sm:px-3 sm:py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition items-center gap-1.5 cursor-pointer"
+            className="btn-retro-arcade hidden xs:flex p-1.5 sm:px-3 sm:py-2 text-xs font-bold text-slate-200 hover:text-cyan-300 bg-[#1a2133] hover:bg-[#232c44] border-t border-x border-slate-700 border-b-slate-950 rounded-xl transition items-center gap-1.5 cursor-pointer shadow-sm active:translate-y-0.5"
             title="Statistiques et sauvegarde"
           >
-            <BarChart3 className="w-4 h-4 text-slate-600" />
-            <span className="hidden md:inline">Statistiques</span>
+            <BarChart3 className="w-4 h-4 text-cyan-400" />
+            <span className="hidden md:inline font-retro">Statistiques</span>
           </button>
 
           {/* Scanner shortcut button */}
@@ -69,10 +72,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="btn-scan-barcode-nav"
             type="button"
             onClick={() => onOpenAddModal(true)}
-            className="px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="btn-retro-arcade px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs font-bold text-cyan-200 bg-cyan-950/80 hover:bg-cyan-900 border-t border-x border-cyan-500/50 border-b-cyan-950 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm active:translate-y-0.5"
           >
-            <Barcode className="w-4 h-4 text-indigo-600" />
-            <span className="hidden sm:inline">Scanner</span>
+            <Barcode className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline font-retro">Scanner</span>
           </button>
 
           {/* Ajouter button */}
@@ -80,10 +83,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="btn-add-game-nav"
             type="button"
             onClick={() => onOpenAddModal(false)}
-            className="px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm shadow-indigo-600/20"
+            className="btn-retro-arcade px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-bold text-slate-900 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 border-t border-x border-amber-300 border-b-amber-700 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:translate-y-0.5"
           >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Ajouter</span>
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span className="hidden sm:inline font-retro tracking-wide font-black">Ajouter</span>
           </button>
         </div>
       </div>
