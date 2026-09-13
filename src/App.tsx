@@ -371,17 +371,6 @@ export default function App() {
             onDelete={handleRequestDelete}
           />
         );
-      case 'shelf':
-        return (
-          <GameShelfView
-            games={gamesList}
-            onSelect={(g) => {
-              setSelectedGame(g);
-              setIsDetailsOpen(true);
-            }}
-            onDelete={handleRequestDelete}
-          />
-        );
       case 'table':
         return (
           <GameTableView
@@ -718,6 +707,8 @@ export default function App() {
         initialBarcode={addModalInitialBarcode}
         existingGames={games}
         onUpdateQuantity={handleUpdateQuantity}
+        onUpdateGamePrice={handleUpdateGamePrice}
+        onUpdateGame={handleUpdateGame}
         onOpenSettings={() => setIsGuideOpen(true)}
       />
 

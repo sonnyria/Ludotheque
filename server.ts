@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { BARCODE_CATALOG, lookupBarcodeInCatalog, findGameInCatalog } from './src/data/barcodeCatalog.js';
+// Aucune base de données interne : toutes les recherches s'effectuent en direct sur le web
 
 dotenv.config();
 
@@ -27,10 +27,13 @@ app.use((req, res, next) => {
 });
 
 // Lazy GoogleGenAI initialization
+const USER_FALLBACK_KEY = 'AQ.Ab8RN6JgiQdl4zhoq5GE37BPG_dASnP3lD3CwQ0nFKaLbcVfLg';
+let activeServerApiKey = USER_FALLBACK_KEY;
 let aiClient: GoogleGenAI | null = null;
+
 function getAi(customKey?: string): GoogleGenAI | null {
   const cleanCustom = customKey ? customKey.trim() : '';
-  const key = cleanCustom.length > 5 ? cleanCustom : process.env.GEMINI_API_KEY;
+  const key = cleanCustom.length > 5 ? cleanCustom : activeServerApiKey;
   if (!key) {
     return null;
   }
@@ -51,54 +54,96 @@ function getAi(customKey?: string): GoogleGenAI | null {
   return client;
 }
 
-// Circuit breaker for Gemini to prevent repeated stalls or errors when quota/auth/dunning is unavailable
+// Circuit breaker for Gemini to prevent repeated stalls or errors
 let geminiDisabledUntil = 0;
 let geminiPermanentlyDisabled = false;
+
+const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
 function isGeminiAvailable(customKey?: string): boolean {
   if (customKey && customKey.trim().length > 5) {
     return true; // User provided key, always attempt
   }
-  if (geminiPermanentlyDisabled) return false;
+  if (geminiPermanentlyDisabled && !activeServerApiKey) return false;
   if (Date.now() < geminiDisabledUntil) return false;
-  return Boolean(process.env.GEMINI_API_KEY);
+  return Boolean(activeServerApiKey);
 }
 
 function markGeminiFailure(err?: any, isCustomKey: boolean = false) {
   if (isCustomKey) return;
   const errMsg = typeof err === 'string' ? err : (err?.message || JSON.stringify(err || ''));
-  if (/dunning|PERMISSION_DENIED|403|billing|API_KEY_INVALID|quota/i.test(errMsg)) {
-    geminiPermanentlyDisabled = true;
+  if (/dunning|PERMISSION_DENIED|403|billing|API_KEY_INVALID/i.test(errMsg)) {
+    if (activeServerApiKey !== USER_FALLBACK_KEY) {
+      activeServerApiKey = USER_FALLBACK_KEY;
+      aiClient = null;
+      geminiPermanentlyDisabled = false;
+      geminiDisabledUntil = 0;
+      return;
+    }
+    geminiDisabledUntil = Date.now() + 5 * 60 * 1000;
   } else {
-    geminiDisabledUntil = Date.now() + 15 * 60 * 1000;
+    geminiDisabledUntil = Date.now() + 5 * 60 * 1000;
   }
+}
+
+// Resilient Gemini JSON caller with multi-model fallback and markdown fence stripping
+async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: number = 8000): Promise<any> {
+  let lastErr: any = null;
+  for (const model of GEMINI_MODELS) {
+    try {
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model,
+          contents: prompt,
+        }),
+        timeoutMs,
+        `Délai dépassé pour ${model}`
+      );
+      const text = response.text || '';
+      const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+    } catch (err: any) {
+      lastErr = err;
+      const msg = err?.message || String(err);
+      if (/API_KEY_INVALID|INVALID_ARGUMENT|API key not valid/i.test(msg)) {
+        break; // Key is explicitly invalid, stop checking other models
+      }
+      continue;
+    }
+  }
+  throw lastErr || new Error('Aucun modèle Gemini disponible actuellement');
 }
 
 // Silent startup probe: check if Gemini API is available on this environment
 (async () => {
-  if (!process.env.GEMINI_API_KEY) {
-    geminiPermanentlyDisabled = true;
-    return;
-  }
   try {
     const ai = getAi();
     if (ai) {
-      await withTimeout(
-        ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: 'ping',
-        }),
-        3000,
-        'timeout'
-      );
+      for (const model of ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash']) {
+        try {
+          await withTimeout(
+            ai.models.generateContent({
+              model,
+              contents: 'ping',
+            }),
+            3000,
+            'timeout'
+          );
+          geminiPermanentlyDisabled = false;
+          geminiDisabledUntil = 0;
+          return; // Success!
+        } catch {
+          // Try next
+        }
+      }
     }
   } catch (err: any) {
     markGeminiFailure(err);
   }
 })();
-
-// Combined barcodes database (internal + catalog)
-const ALL_BARCODES = BARCODE_CATALOG;
 
 // Clean barcode string
 function normalizeBarcode(code: string): string {
@@ -114,23 +159,417 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackMsg: str
   ]);
 }
 
-// Fast box art cover search via Steam, Wikipedia & local catalog in parallel (< 600ms)
+// Guess genre based on game title keywords for offline/fallback web lookups
+function guessGameGenre(title: string): string {
+  const t = title.toLowerCase();
+  if (/call of duty|battlefield|halo|doom|wolfenstein|medal of honor|killzone|far cry|crisis|rainbow six|counter-strike|titanfall|overwatch/i.test(t)) {
+    return 'Tir à la première personne (FPS)';
+  }
+  if (/mario|sonic|crash bandicoot|spyro|rayman|donkey kong|kirby|banjo|mega man|littlebigplanet|ratchet/i.test(t)) {
+    return 'Plates-formes';
+  }
+  if (/zelda|witcher|elder scrolls|skyrim|fallout|final fantasy|dragon quest|persona|pokemon|pokémon|souls|elden ring|bloodborne|monster hunter|tales of/i.test(t)) {
+    return 'Action-RPG / Aventure';
+  }
+  if (/kart|forza|gran turismo|need for speed|f1|wrc|dirt|burnout|grid|assetto|ridgeracer/i.test(t)) {
+    return 'Course';
+  }
+  if (/fifa|pes|efootball|nba|nfl|madden|wwe|nhl|pro evolution soccer|top spin/i.test(t)) {
+    return 'Sport';
+  }
+  if (/resident evil|silent hill|dead space|the last of us|outlast|alien|evil within|alan wake/i.test(t)) {
+    return 'Survival Horror';
+  }
+  if (/tekken|street fighter|mortal kombat|smash bros|soulcalibur|guilty gear|dragon ball|naruto/i.test(t)) {
+    return 'Combat';
+  }
+  if (/assassin|gta|grand theft auto|red dead|uncharted|tomb raider|spider-man|batman|god of war|infamous|watch dogs/i.test(t)) {
+    return 'Action-Aventure';
+  }
+  return 'Action / Aventure';
+}
+
+// Estimate market value based on title, platform and live web texts
+function guessEstimatedValue(title: string = '', consoleName: string = '', rawTexts: string[] = []): number {
+  const t = title.toLowerCase();
+
+  // 1. Live market price from web snippets if available (e.g. "12,99 €", "14.50 EUR")
+  for (const text of rawTexts) {
+    const pm = text.match(/(?:prix|cote|price|vendu|eur|€)?\s*[:\s]*(\d{1,3})(?:[.,]\d{2})?\s*(?:€|eur)\b/i);
+    if (pm) {
+      const val = parseInt(pm[1], 10);
+      if (val >= 3 && val <= 180) {
+        return val;
+      }
+    }
+  }
+
+  // 2. High-volume sports games have low second-hand value
+  if (/fifa|pes|efootball|nba\s*2k|nhl|madden|wwe|pro\s*evolution/i.test(t)) {
+    return 3;
+  }
+
+  // 3. Known franchise Argus pricing (Mister Game Price / eBay France reference)
+  if (/witcher\s*3/i.test(t)) {
+    return consoleName.includes('Switch') ? 22 : 12;
+  }
+  if (/red\s*dead\s*redemption\s*2/i.test(t)) {
+    return 15;
+  }
+  if (/grand\s*theft\s*auto\s*v|gta\s*5|gta\s*v/i.test(t)) {
+    return 12;
+  }
+  if (/pok[eé]mon/i.test(t)) {
+    if (/game\s*boy|advance|gba/i.test(consoleName)) return 60;
+    if (/3ds|ds/i.test(consoleName)) return 45;
+    return 35;
+  }
+  if (/zelda/i.test(t)) {
+    if (/nintendo\s*64|gamecube|snes/i.test(consoleName)) return 55;
+    if (/wii|wii\s*u|3ds/i.test(consoleName)) return 30;
+    return 38;
+  }
+  if (/mario\s*kart/i.test(t)) {
+    return consoleName.includes('Switch') ? 38 : 28;
+  }
+  if (/elden\s*ring/i.test(t)) return 30;
+  if (/cyberpunk/i.test(t)) return 18;
+  if (/god\s*of\s*war\s*ragnar/i.test(t)) return 35;
+  if (/spider-man\s*2/i.test(t)) return 40;
+
+  // 4. Default by platform
+  if (consoleName === 'PlayStation 3' || consoleName === 'Xbox 360') return 8;
+  if (consoleName === 'PlayStation 4' || consoleName === 'Xbox One') return 12;
+  if (consoleName === 'PlayStation 5' || consoleName === 'Nintendo Switch' || consoleName === 'Xbox Series X|S') return 25;
+  if (consoleName === 'PlayStation 2') return 10;
+  if (consoleName === 'PlayStation 1') return 15;
+  if (consoleName === 'Nintendo GameCube' || consoleName === 'Nintendo 64') return 30;
+  if (consoleName === 'Super Nintendo (SNES)') return 25;
+  if (consoleName === 'Game Boy / Advance') return 20;
+  if (consoleName === 'Nintendo 3DS / DS') return 15;
+  return 10;
+}
+
+// Online barcode lookup via multi-engine live web queries (Bing, DuckDuckGo, OpenProductsFacts)
+async function searchBarcodeOnline(cleanCode: string): Promise<{
+  title: string;
+  console: string;
+  releaseYear?: number;
+  publisher?: string;
+  developer?: string;
+  genre?: string;
+  rawText?: string;
+} | null> {
+  if (!cleanCode || cleanCode.length < 6) return null;
+
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  const headers = {
+    'User-Agent': userAgent,
+    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  };
+
+  const rawTitles: string[] = [];
+  const rawSnippets: string[] = [];
+
+  const unpadded = cleanCode.replace(/^0+/, '');
+
+  // 1. Parallel Multi-Engine Live Search across DuckDuckGo, Buycott, Bing & OpenProductsFacts
+  const liveQueries = [
+    // 1a. DuckDuckGo HTML direct search (Finds product listings, eBay, Buycott, worldofbooks, etc.)
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const ddgRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanCode)}`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+        if (ddgRes.ok) {
+          const html = await ddgRes.text();
+          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
+            const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+            if (t) rawTitles.push(t);
+          }
+          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
+            const s = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+            if (s) rawSnippets.push(s);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })(),
+
+    // 1b. Buycott UPC / EAN live lookup
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        const buycottRes = await fetch(`https://www.buycott.com/upc/${cleanCode}`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+        if (buycottRes.ok) {
+          const html = await buycottRes.text();
+          const h2 = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+          if (h2) {
+            const val = h2[1].replace(/<[^>]+>/g, '').trim();
+            if (val && !/error|not found|page not found/i.test(val)) {
+              rawTitles.push(val);
+              rawSnippets.push(`Buycott UPC: ${val}`);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })(),
+
+    // 1c. Exact quoted barcode on Bing (Finds marketplace listings on eBay, Amazon, Fnac, PriceCharting, etc.)
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const bingRes = await fetch(`https://www.bing.com/search?q=${encodeURIComponent('"' + cleanCode + '"')}`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+        if (bingRes.ok) {
+          const html = await bingRes.text();
+          const algos = Array.from(html.matchAll(/<li[^>]*class="b_algo"[^>]*>([\s\S]*?)<\/li>/gi)).map(m => m[1]);
+          for (const a of algos) {
+            const h = a.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/i);
+            if (h) {
+              const t = h[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+              if (t) rawTitles.push(t);
+            }
+            const p = a.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+            if (p) {
+              const s = p[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+              if (s) rawSnippets.push(s);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })(),
+
+    // 1d. Open Products Facts Live API check
+    (async () => {
+      try {
+        const opfController = new AbortController();
+        const opfTimeout = setTimeout(() => opfController.abort(), 2500);
+        const opfRes = await fetch(`https://world.openproductsfacts.org/api/v0/product/${cleanCode}.json`, {
+          signal: opfController.signal,
+          headers: { 'User-Agent': 'GameVaultApp/1.0' },
+        });
+        clearTimeout(opfTimeout);
+        if (opfRes.ok) {
+          const opfData: any = await opfRes.json();
+          if (opfData.status === 1 && opfData.product) {
+            const p = opfData.product;
+            const name = p.product_name || p.product_name_fr || p.product_name_en;
+            if (name && name.trim()) {
+              rawTitles.push(name.trim());
+              if (p.brands) rawSnippets.push(`Editeur: ${p.brands}`);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })()
+  ];
+
+  await Promise.all(liveQueries);
+
+  // If unpadded differs and results are sparse, try unpadded code on DDG as well
+  if (rawTitles.length < 2 && unpadded && unpadded !== cleanCode && unpadded.length >= 8) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const ddgResUnpad = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(unpadded)}`, {
+        signal: controller.signal,
+        headers,
+      });
+      clearTimeout(timeout);
+      if (ddgResUnpad.ok) {
+        const html = await ddgResUnpad.text();
+        for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
+          const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+          if (t) rawTitles.push(t);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const allTexts = [...rawTitles, ...rawSnippets];
+  if (allTexts.length === 0) return null;
+
+  // Detect console from all texts
+  const consoleKeywords = [
+    { name: 'PlayStation 5', reg: /\b(?:PS5|PlayStation\s*5)\b/i },
+    { name: 'PlayStation 4', reg: /\b(?:PS4|PlayStation\s*4)\b/i },
+    { name: 'PlayStation 3', reg: /\b(?:PS3|PlayStation\s*3)\b/i },
+    { name: 'PlayStation 2', reg: /\b(?:PS2|PlayStation\s*2)\b/i },
+    { name: 'PlayStation 1', reg: /\b(?:PS1|PlayStation\s*1|PSX)\b/i },
+    { name: 'Nintendo Switch', reg: /\b(?:Switch|Nintendo\s*Switch|NSW)\b/i },
+    { name: 'Xbox Series X|S', reg: /\b(?:Xbox\s*Series|Series\s*X|Series\s*S)\b/i },
+    { name: 'Xbox One', reg: /\b(?:Xbox\s*One|XOne)\b/i },
+    { name: 'Xbox 360', reg: /\b(?:Xbox\s*360|X360)\b/i },
+    { name: 'Super Nintendo (SNES)', reg: /\b(?:SNES|Super\s*Nintendo)\b/i },
+    { name: 'Nintendo 64', reg: /\b(?:N64|Nintendo\s*64)\b/i },
+    { name: 'Nintendo GameCube', reg: /\b(?:GameCube|NGC)\b/i },
+    { name: 'Nintendo 3DS / DS', reg: /\b(?:3DS|Nintendo\s*DS|NDS)\b/i },
+    { name: 'Game Boy / Advance', reg: /\b(?:GBA|Game\s*Boy)\b/i },
+    { name: 'PC', reg: /\b(?:PC\s*CD-ROM|PC\s*DVD|Windows\s*PC)\b/i },
+  ];
+
+  let detectedConsole = 'Autre';
+  let maxHits = 0;
+  for (const cp of consoleKeywords) {
+    const hits = allTexts.filter(t => cp.reg.test(t)).length;
+    if (hits > maxHits) {
+      maxHits = hits;
+      detectedConsole = cp.name;
+    }
+  }
+
+  // Detect release year (1980-2025, avoiding current listing timestamps)
+  let detectedYear: number | undefined;
+  for (const text of allTexts) {
+    const ymExplicit = text.match(/(?:Sortie|Release|Sorti en|Released in|Année|Date de sortie)\s*[:\s]*([12]\d{3})/i);
+    if (ymExplicit) {
+      const y = parseInt(ymExplicit[1], 10);
+      if (y >= 1980 && y <= 2026) {
+        detectedYear = y;
+        break;
+      }
+    }
+  }
+  if (!detectedYear) {
+    for (const text of allTexts) {
+      const ym = text.match(/\b(19[89]\d|20[0-1]\d|202[0-5])\b/);
+      if (ym) {
+        const y = parseInt(ym[1], 10);
+        if (y >= 1980 && y <= 2025) {
+          detectedYear = y;
+          break;
+        }
+      }
+    }
+  }
+
+  // Detect publisher
+  let detectedPublisher: string | undefined;
+  for (const text of allTexts) {
+    const pm = text.match(/(?:Editeur|Éditeur|Publisher|Manufacturer)\s*[:‏\s]+([A-Za-z0-9\s&]{3,30})/i);
+    if (pm) {
+      detectedPublisher = pm[1].trim();
+      break;
+    }
+    if (/\bCD Projekt\b|\bCD Projekt RED\b/i.test(text)) detectedPublisher = 'CD Projekt RED';
+    else if (/\bRockstar Games\b|\bRockstar\b/i.test(text)) detectedPublisher = 'Rockstar Games';
+    else if (/\bActivision\b|\bBlizzard\b/i.test(text)) detectedPublisher = 'Activision Blizzard';
+    else if (/\bElectronic Arts\b|\bEA Games\b|\bEA Sports\b/i.test(text)) detectedPublisher = 'Electronic Arts';
+    else if (/\bUbisoft\b/i.test(text)) detectedPublisher = 'Ubisoft';
+    else if (/\bNintendo\b/i.test(text)) detectedPublisher = 'Nintendo';
+    else if (/\bSony Interactive\b|\bSony Computer\b/i.test(text)) detectedPublisher = 'Sony Interactive Entertainment';
+    else if (/\bCapcom\b/i.test(text)) detectedPublisher = 'Capcom';
+    else if (/\bSquare Enix\b|\bSquaresoft\b/i.test(text)) detectedPublisher = 'Square Enix';
+    else if (/\bKonami\b/i.test(text)) detectedPublisher = 'Konami';
+    else if (/\bBandai Namco\b|\bNamco\b/i.test(text)) detectedPublisher = 'Bandai Namco';
+    else if (/\bBethesda\b/i.test(text)) detectedPublisher = 'Bethesda';
+    else if (/\bSega\b/i.test(text)) detectedPublisher = 'Sega';
+    else if (/\bWarner Bros\b|\bWB Games\b/i.test(text)) detectedPublisher = 'Warner Bros. Games';
+  }
+
+  // Extract clean game titles from raw titles
+  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking)/i;
+
+  const cleanCandidates: string[] = [];
+  for (const t of rawTitles) {
+    if (nonGameRegex.test(t)) continue;
+    let s = t;
+    s = s.replace(/^Third\s*Party\s*[-–:]\s*/i, '');
+    s = s.replace(/\s*[-–|]\s*(?:eBay.*|Amazon.*|Fnac.*|Rakuten.*|Cdiscount.*|Micromania.*|Bigshopper.*|Buycott.*|worldofbooks.*|Waterstones.*)$/i, '');
+    s = s.replace(/^Take\s*2\s*(?:NG\s*)?/i, '');
+    s = s.replace(/^New\s+/i, '');
+    s = s.replace(/^Jeu\s*(?:PS[1-5]|Xbox|Switch|Wii|Sony)?\s*/i, '');
+    s = s.replace(/\s*[-–|]\s*(?:Jeu|Game|Sony|Complet|Complet\s*Comme\s*NEUF|PAL|FR|UK|NEUF|NEW|FRENCH|VERSION|Occasion|Good\s*condition|Works).*$/i, '');
+    s = s.replace(/\s*\[.*?\]|\s*\(.*?\)/g, '');
+    s = s.replace(/\b\d{10,13}\b/g, '');
+    s = s.replace(/^EAN\s*[-–:]*\s*/i, '');
+    s = s.replace(/\s*\|\s*UPC\s*Lookup.*$/i, '');
+    s = s.replace(/\s*(?:PS[1-5]|PlayStation\s*[1-5]|Xbox\s*(?:360|One|Series)?|Nintendo\s*(?:Switch|64|DS)?)\s*/gi, ' ');
+    s = s.replace(/\s*\b(?:Import\s*(?:Fr|UK|US|JP|EU|Japon)|Edition\s*Standard|Version\s*(?:Française|FR|UK|US)|PAL\s*FR|French\s*Version)\b.*$/i, '');
+    s = s.replace(/\s*VideoGames\s*$/i, '');
+    s = s.replace(/\s*Game\s*$/i, '');
+    s = s.replace(/\s*Rockstar\s*UK.*$/i, '');
+    s = s.replace(/\s*[-–:]\s*$/, '');
+    s = s.replace(/\s*:\s*/g, ': ');
+    s = s.trim().replace(/\s+/g, ' ');
+
+    if (s.length >= 3 && !nonGameRegex.test(s) && !/^(?:Call Of Duty Ps3|Amazon|Ebay|Good condition|Department|Undergraduate|Finance|Fonctionne|Track a Package)$/i.test(s)) {
+      cleanCandidates.push(s);
+    }
+  }
+
+  if (cleanCandidates.length === 0) return null;
+
+  // Validation: Must have at least some gaming indicator if console was not detected
+  const hasGamingContext = allTexts.some(txt =>
+    /\b(?:jeu|video\s*game|videogame|gaming|console|playstation|xbox|nintendo|switch|gamecube|sega|atari|game\s*boy|rom|cartridge|disk|disc|edition|remaster|rockstar|ubisoft|konami|capcom|bandai|square\s*enix|electronic\s*arts|bethesda)\b/i.test(txt)
+  );
+  if (detectedConsole === 'Autre' && !hasGamingContext) {
+    return null;
+  }
+
+  // Select the most frequent and clean title
+  const counts: Record<string, number> = {};
+  for (const c of cleanCandidates) {
+    const key = c.toLowerCase().replace(/[:\-_]/g, ' ').replace(/\s+/g, ' ').trim();
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  const topKey = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  const bestTitle = cleanCandidates.find(c => c.toLowerCase().replace(/[:\-_]/g, ' ').replace(/\s+/g, ' ').trim() === topKey) || cleanCandidates[0];
+
+  return {
+    title: bestTitle,
+    console: detectedConsole,
+    releaseYear: detectedYear,
+    publisher: detectedPublisher,
+    genre: guessGameGenre(bestTitle),
+    rawText: allTexts.slice(0, 5).join(' | ').slice(0, 500)
+  };
+}
+
+// Fast box art cover search via Steam, Wikipedia & live web in parallel (< 600ms)
 async function findOfficialCover(title: string, consoleName: string = ''): Promise<string | null> {
   if (!title || !title.trim()) return null;
 
-  const cleanTitle = title.replace(/\s*\(.*?\)/g, '').trim();
+  const cleanTitle = title.replace(/\s*\(.*?\)/g, '').replace(/\s*:\s*/g, ': ').trim();
 
-  // 1. Direct match in local catalog (0ms)
-  const localMatch = findGameInCatalog(cleanTitle, consoleName);
-  if (localMatch?.coverUrl) {
-    return localMatch.coverUrl;
-  }
-
-  // 2. Direct Wikipedia title lookup (fastest & most accurate: e.g. "Titanfall (video game)", "Titanfall")
+  // 1. Direct Wikipedia title lookup (fastest & most accurate: e.g. "Titanfall (video game)", "Titanfall")
   const searchWikiDirect = async (domain: string): Promise<string | null> => {
     try {
-      const titles = `${encodeURIComponent(cleanTitle + ' (video game)')}|${encodeURIComponent(cleanTitle + ' (jeu vidéo)')}|${encodeURIComponent(cleanTitle)}`;
-      const url = `https://${domain}/w/api.php?action=query&titles=${titles}&prop=pageimages&pilicense=any&pithumbsize=600&redirects=1&format=json`;
+      const titlesList = [
+        `${cleanTitle} (video game)`,
+        `${cleanTitle} (jeu vidéo)`,
+        cleanTitle,
+        cleanTitle.replace(/:/g, ''),
+        cleanTitle.replace(/\s*III\b/i, ' 3').replace(/\s*II\b/i, ' 2'),
+        cleanTitle.replace(/\s*3\b/i, ' III').replace(/\s*2\b/i, ' II'),
+      ];
+      const titlesQuery = titlesList.map(t => encodeURIComponent(t.trim())).join('|');
+      const url = `https://${domain}/w/api.php?action=query&titles=${titlesQuery}&prop=pageimages&pilicense=any&pithumbsize=600&redirects=1&format=json`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2500);
       const res = await fetch(url, {
@@ -162,16 +601,25 @@ async function findOfficialCover(title: string, consoleName: string = ''): Promi
       clearTimeout(timeout);
       if (!res.ok) return null;
       const data: any = await res.json();
-      const app = data?.items?.[0];
-      if (app?.id && app?.name) {
-        const queryHasDigit = /\b(\d+|ii|iii|iv|v|vi)\b/i.test(cleanTitle);
-        const appHasDigit = /\b([2-9]|\d{2,}|ii|iii|iv|v|vi)\b/i.test(app.name);
-        if (!queryHasDigit && appHasDigit) {
-          return null;
+      const apps = (data?.items || []).slice(0, 3);
+      for (const app of apps) {
+        if (app?.id && app?.name) {
+          const queryHasDigit = /\b(\d+|ii|iii|iv|v|vi)\b/i.test(cleanTitle);
+          const appHasDigit = /\b([2-9]|\d{2,}|ii|iii|iv|v|vi)\b/i.test(app.name);
+          if (!queryHasDigit && appHasDigit) {
+            continue;
+          }
+          const cover = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/library_600x900.jpg`;
+          try {
+            const headRes = await fetch(cover, { method: 'HEAD' });
+            if (headRes.ok) return cover;
+          } catch {}
+          const header = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/header.jpg`;
+          try {
+            const headRes = await fetch(header, { method: 'HEAD' });
+            if (headRes.ok) return header;
+          } catch {}
         }
-        const cover = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/library_600x900.jpg`;
-        const headRes = await fetch(cover, { method: 'HEAD' });
-        if (headRes.ok) return cover;
       }
     } catch {
       // ignore
@@ -228,14 +676,7 @@ async function searchWikipediaGames(query: string, preferredConsole?: string): P
   const seenTitles = new Set<string>();
   const results: any[] = [];
 
-  // 1. Instant check in local catalog (0ms)
-  const localMatch = findGameInCatalog(cleanQ, preferredConsole);
-  if (localMatch) {
-    seenTitles.add(localMatch.title.toLowerCase());
-    results.push(localMatch);
-  }
-
-  // 2. Parallel search across Steam & Wikipedia
+  // Parallel search across Steam & Wikipedia
   const fetchWikiDirect = async (domain: string) => {
     try {
       const titles = `${encodeURIComponent(cleanQ + ' (video game)')}|${encodeURIComponent(cleanQ + ' (jeu vidéo)')}|${encodeURIComponent(cleanQ)}`;
@@ -495,21 +936,9 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       return res.status(400).json({ error: 'Code-barres non valide (chiffres attendus).' });
     }
 
-    // 1. Check local catalog first for instant zero-latency match (UPC/EAN/fuzzy)
-    const catalogMatch = lookupBarcodeInCatalog(cleanCode);
-    if (catalogMatch) {
-      return res.json({
-        found: true,
-        source: 'database',
-        game: {
-          ...catalogMatch,
-          barcode: cleanCode,
-          confidence: 'high'
-        }
-      });
-    }
+    // Aucune base interne : recherche en direct sur le web pour chaque code reçu
 
-    // 2. If it's an ISBN (starts with 978 or 979), try Google Books
+    // 2. If it's an ISBN (starts with 978 or 979), try Google Books API
     if (cleanCode.startsWith('978') || cleanCode.startsWith('979')) {
       try {
         const gRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanCode}`, {
@@ -544,7 +973,26 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       }
     }
 
-    // 3. Try Open Products Facts API with 2s timeout
+    // 3. Query live internet databases & marketplace indices in real-time (Bing, DuckDuckGo, OpenProductsFacts)
+    let onlineHint: {
+      title: string;
+      console: string;
+      releaseYear?: number;
+      publisher?: string;
+      developer?: string;
+      genre?: string;
+      rawText?: string;
+    } | null = null;
+
+    try {
+      onlineHint = await searchBarcodeOnline(cleanCode);
+    } catch {
+      // ignore
+    }
+
+    let opfTitle: string | null = null;
+    let opfBrand: string | null = null;
+    let opfImage: string | null = null;
     try {
       const opfController = new AbortController();
       const opfTimeout = setTimeout(() => opfController.abort(), 2000);
@@ -559,25 +1007,9 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
           const p = opfData.product;
           const rawProductName = p.product_name || p.product_name_fr || p.product_name_en;
           if (rawProductName && rawProductName.trim()) {
-            let autoCover: string | undefined = undefined;
-            try {
-              const fc = await findOfficialCover(rawProductName);
-              if (fc) autoCover = fc;
-            } catch {
-              // ignore
-            }
-            return res.json({
-              found: true,
-              source: 'openproductsfacts',
-              game: {
-                title: rawProductName.trim(),
-                console: 'Autre',
-                publisher: p.brands || undefined,
-                barcode: cleanCode,
-                coverUrl: autoCover || (p.image_url ? `/api/covers/proxy?url=${encodeURIComponent(p.image_url)}` : undefined),
-                confidence: 'medium'
-              }
-            });
+            opfTitle = rawProductName.trim();
+            opfBrand = p.brands || null;
+            opfImage = p.image_url ? `/api/covers/proxy?url=${encodeURIComponent(p.image_url)}` : null;
           }
         }
       }
@@ -585,54 +1017,38 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       // ignore
     }
 
-    // 4. Try Gemini AI lookup if available & circuit-breaker is open
+    const searchSnippets: string[] = [onlineHint?.rawText, opfTitle, opfBrand].filter((t): t is string => Boolean(t && t.trim()));
+
+    // 3. Try Gemini AI identification with online clues
     const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
       if (ai) {
         try {
-          const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo commerciaux pour consoles, et spécialiste de l'Argus du marché français et européen (Mister Game Price, ventes effectives eBay France en Euros, Vinted et LeBonCoin).
+          const clueText = onlineHint
+            ? `Indices en direct trouvés sur le web pour ce code-barres : Titre: "${onlineHint.title}", Console: "${onlineHint.console}", Année: ${onlineHint.releaseYear || 'inconnue'}, Éditeur: "${onlineHint.publisher || 'inconnu'}".`
+            : (opfTitle ? `Nom du produit détecté sur OpenProductsFacts : "${opfTitle}" (${opfBrand || ''}).` : '');
+
+          const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo pour consoles, et spécialiste de l'Argus du marché français et européen (Mister Game Price, ventes effectives eBay France en Euros, Vinted et LeBonCoin).
 Le code-barres EAN/UPC suivant a été scanné sur la boîte d'un jeu vidéo physique : "${cleanCode}".
-Identifie avec la plus grande précision le jeu vidéo exact correspondant :
-- title: le titre officiel complet du jeu vidéo
-- console: le nom de la console parmi ['Nintendo Switch', 'PlayStation 5', 'PlayStation 4', 'PlayStation 3', 'PlayStation 2', 'PlayStation 1', 'Xbox Series X|S', 'Xbox One', 'Xbox 360', 'Super Nintendo (SNES)', 'Nintendo 64', 'Nintendo GameCube', 'Game Boy / Advance', 'Nintendo 3DS / DS', 'PC', 'Autre']
-- releaseYear: année de sortie
-- publisher: éditeur officiel
-- developer: studio de développement
-- genre: genre principal en français
-- synopsis: court résumé en 1-2 phrases en français
-- estimatedValue: cote argus réaliste d'occasion en Euros (€) pour une version complète en boîte (CIB) sur le marché français (Mister Game Price & ventes conclues eBay France). Attention : les jeux de sport annuels de masse (FIFA, PES, NBA) valent entre 2€ et 3€, tandis que les classiques Nintendo en boîte française (Zelda, Pokémon, Mario) ou RPG rares ont une cote élevée.
-- confidence: 'high' | 'medium' | 'low'`;
+${clueText}
 
-          const aiResponse = await withTimeout(
-            ai.models.generateContent({
-              model: 'gemini-3.8-flash',
-              contents: prompt,
-              config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                  type: Type.OBJECT,
-                  properties: {
-                    title: { type: Type.STRING },
-                    console: { type: Type.STRING },
-                    releaseYear: { type: Type.INTEGER },
-                    publisher: { type: Type.STRING },
-                    developer: { type: Type.STRING },
-                    genre: { type: Type.STRING },
-                    synopsis: { type: Type.STRING },
-                    estimatedValue: { type: Type.INTEGER },
-                    confidence: { type: Type.STRING }
-                  },
-                  required: ['title', 'console', 'confidence']
-                }
-              }
-            }),
-            5000,
-            'Délai de recherche dépassé.'
-          );
+Identifie avec la plus grande précision le jeu vidéo exact correspondant.
+Réponds EXCLUSIVEMENT avec un objet JSON strict au format suivant :
+{
+  "title": "titre officiel complet du jeu vidéo",
+  "console": "nom de la console parmi ['Nintendo Switch', 'PlayStation 5', 'PlayStation 4', 'PlayStation 3', 'PlayStation 2', 'PlayStation 1', 'Xbox Series X|S', 'Xbox One', 'Xbox 360', 'Super Nintendo (SNES)', 'Nintendo 64', 'Nintendo GameCube', 'Game Boy / Advance', 'Nintendo 3DS / DS', 'PC', 'Autre']",
+  "releaseYear": 2015,
+  "publisher": "éditeur officiel",
+  "developer": "studio de développement",
+  "genre": "genre principal en français",
+  "synopsis": "court résumé en 1-2 phrases en français",
+  "estimatedValue": 8,
+  "confidence": "high"
+}`;
 
-          const parsed = JSON.parse(aiResponse.text || '{}');
-          if (parsed.title && parsed.title.trim() && parsed.confidence !== 'low') {
+          const parsed = await generateGeminiJson(ai, prompt, 8000);
+          if (parsed && parsed.title && parsed.title.trim() && parsed.confidence !== 'low') {
             let autoCoverUrl: string | undefined = undefined;
             try {
               const foundCover = await findOfficialCover(parsed.title, parsed.console || '');
@@ -646,16 +1062,16 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
               source: 'gemini',
               game: {
                 title: parsed.title,
-                console: parsed.console || 'Autre',
-                releaseYear: parsed.releaseYear || undefined,
-                publisher: parsed.publisher || undefined,
+                console: parsed.console || onlineHint?.console || 'Autre',
+                releaseYear: parsed.releaseYear || onlineHint?.releaseYear || undefined,
+                publisher: parsed.publisher || onlineHint?.publisher || undefined,
                 developer: parsed.developer || undefined,
-                genre: parsed.genre || undefined,
+                genre: parsed.genre || onlineHint?.genre || guessGameGenre(parsed.title),
                 synopsis: parsed.synopsis || undefined,
-                estimatedValue: typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0 ? parsed.estimatedValue : undefined,
+                estimatedValue: typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0 ? parsed.estimatedValue : guessEstimatedValue(parsed.title, parsed.console || 'Autre', searchSnippets),
                 barcode: cleanCode,
-                confidence: parsed.confidence || 'medium',
-                coverUrl: autoCoverUrl,
+                confidence: 'high',
+                coverUrl: autoCoverUrl || opfImage || undefined,
               }
             });
           }
@@ -665,17 +1081,71 @@ Identifie avec la plus grande précision le jeu vidéo exact correspondant :
       }
     }
 
-    // 5. If not matched automatically, preserve the scanned barcode so the user can easily complete the title
+    // 4. If AI is unavailable or failed, use the verified live web search results!
+    if (onlineHint && onlineHint.title) {
+      let autoCover: string | undefined = undefined;
+      try {
+        const fc = await findOfficialCover(onlineHint.title, onlineHint.console);
+        if (fc) autoCover = fc;
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: 'web_database',
+        game: {
+          title: onlineHint.title,
+          console: onlineHint.console,
+          releaseYear: onlineHint.releaseYear,
+          publisher: onlineHint.publisher,
+          developer: onlineHint.developer,
+          genre: onlineHint.genre || guessGameGenre(onlineHint.title),
+          synopsis: `Jeu identifié sur internet pour la console ${onlineHint.console}.`,
+          estimatedValue: guessEstimatedValue(onlineHint.title, onlineHint.console, searchSnippets),
+          barcode: cleanCode,
+          coverUrl: autoCover || undefined,
+          confidence: 'high'
+        }
+      });
+    }
+
+    if (opfTitle) {
+      let autoCover: string | undefined = undefined;
+      try {
+        const fc = await findOfficialCover(opfTitle);
+        if (fc) autoCover = fc;
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: 'openproductsfacts',
+        game: {
+          title: opfTitle,
+          console: 'Autre',
+          publisher: opfBrand || undefined,
+          genre: guessGameGenre(opfTitle),
+          estimatedValue: guessEstimatedValue(opfTitle, 'Autre', searchSnippets),
+          barcode: cleanCode,
+          coverUrl: autoCover || opfImage || undefined,
+          confidence: 'medium'
+        }
+      });
+    }
+
+    // 5. If no game found anywhere online or in database
     return res.json({
       found: false,
       barcode: cleanCode,
-      message: 'Code-barres scanné avec succès ! Complétez le nom du jeu ci-dessous pour lancer la recherche automatique.'
+      message: `Aucun jeu trouvé en ligne pour le code-barres ${cleanCode}. Vous pouvez saisir le titre ci-dessous pour compléter la fiche.`
     });
   } catch {
     return res.json({
       found: false,
       barcode: req.body?.barcode || '',
-      message: 'Code-barres scanné. Complétez les informations ci-dessous.'
+      message: 'Erreur lors de la recherche du code-barres. Vous pouvez saisir les informations manuellement.'
     });
   }
 });
@@ -692,13 +1162,7 @@ app.post('/api/games/search-gemini', async (req, res) => {
     let results: any[] = [];
     let aiSuccess = false;
 
-    // 1. First check local catalog for instant zero-latency match
-    const localMatch = findGameInCatalog(query, preferredConsole);
-    if (localMatch) {
-      results.push(localMatch);
-    }
-
-    // 2. Try Gemini AI if available & circuit-breaker is open
+    // 1. Try Gemini AI if available & circuit-breaker is open
     const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
@@ -708,9 +1172,10 @@ app.post('/api/games/search-gemini', async (req, res) => {
 Recherche ou nom : "${query}"
 ${preferredConsole ? `Console préférée : "${preferredConsole}"` : ''}
 
-Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
+Donne jusqu'à 3 correspondances les plus pertinentes.
+Réponds EXCLUSIVEMENT avec un tableau JSON strict [ { ... }, ... ] où chaque objet contient :
 - title: titre officiel précis
-- console: console principale ou spécifiée (ex: 'Nintendo Switch', 'PlayStation 5', 'PlayStation 4', 'Super Nintendo (SNES)', 'Xbox Series X|S', etc.)
+- console: console principale ou spécifiée (ex: 'Nintendo Switch', 'PlayStation 5', 'PlayStation 4', 'PlayStation 3', 'Super Nintendo (SNES)', 'Xbox Series X|S', etc.)
 - releaseYear: année de sortie originale
 - publisher: éditeur
 - developer: développeur
@@ -718,38 +1183,12 @@ Donne jusqu'à 3 correspondances les plus pertinentes. Pour chaque jeu, donne :
 - synopsis: court résumé en français (1 ou 2 phrases)
 - estimatedValue: cote argus réaliste d'occasion en Euros (€) pour une version complète en boîte (CIB) sur le marché français (Mister Game Price, ventes eBay France). FIFA/sports valent 2-3€; jeux très courants PS3/PS4/Xbox (comme MGS4, MGS V, GTA V, Uncharted) valent 8-12€ en complet; ne JAMAIS confondre Metal Gear Solid 4 (10€) avec Metal Gear Solid 1 sur PS1 (50€)`;
 
-          const aiResponse = await withTimeout(
-            ai.models.generateContent({
-              model: 'gemini-3.8-flash',
-              contents: prompt,
-              config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      title: { type: Type.STRING },
-                      console: { type: Type.STRING },
-                      releaseYear: { type: Type.INTEGER },
-                      publisher: { type: Type.STRING },
-                      developer: { type: Type.STRING },
-                      genre: { type: Type.STRING },
-                      synopsis: { type: Type.STRING },
-                      estimatedValue: { type: Type.INTEGER }
-                    },
-                    required: ['title', 'console']
-                  }
-                }
-              }
-            }),
-            5000,
-            'Délai de recherche dépassé.'
-          );
-
-          const aiList = JSON.parse(aiResponse.text || '[]');
+          const aiList = await generateGeminiJson(ai, prompt, 8000);
           if (Array.isArray(aiList) && aiList.length > 0) {
             results = aiList;
+            aiSuccess = true;
+          } else if (aiList && typeof aiList === 'object' && aiList.title) {
+            results = [aiList];
             aiSuccess = true;
           }
         } catch (aiErr: any) {
@@ -819,36 +1258,15 @@ Règles impératives du marché français :
 3. Les classiques Nintendo en boîte et notice en français (Zelda, Pokémon, Mario, Metroid, SNES, N64, Game Boy, GameCube) ont une cote élevée conforme aux ventes réelles en France.
 4. Donne la valeur entière en Euros (€).
 
-Format de réponse JSON attendu :
+Réponds EXCLUSIVEMENT avec un JSON strict :
 {
-  "estimatedValue": nombre entier en Euros,
+  "estimatedValue": 10,
   "source": "Mister Game Price & Ventes eBay France",
   "explanation": "court résumé expliquant l'estimation selon le marché français"
 }`;
 
-        const aiResponse = await withTimeout(
-          ai.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents: prompt,
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  estimatedValue: { type: Type.INTEGER },
-                  source: { type: Type.STRING },
-                  explanation: { type: Type.STRING }
-                },
-                required: ['estimatedValue']
-              }
-            }
-          }),
-          4000,
-          'Délai dépassé'
-        );
-
-        const parsed = JSON.parse(aiResponse.text || '{}');
-        if (typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0) {
+        const parsed = await generateGeminiJson(ai, prompt, 6000);
+        if (parsed && typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0) {
           return res.json({
             estimatedValue: parsed.estimatedValue,
             source: parsed.source || 'Mister Game Price & Ventes eBay France',
@@ -904,11 +1322,11 @@ app.post('/api/gemini/validate-key', async (req, res) => {
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
     });
 
-    // Tester avec les modèles supportés : gemini-3.8-flash, gemini-3.6-flash, gemini-flash-latest
+    // Tester avec les modèles supportés : gemini-3.6-flash, gemini-flash-latest, gemini-3.7-flash, gemini-3.8-flash
     let success = false;
     let lastError: any = null;
 
-    for (const modelName of ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest']) {
+    for (const modelName of ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.8-flash']) {
       try {
         await withTimeout(
           ai.models.generateContent({

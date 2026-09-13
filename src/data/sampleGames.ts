@@ -254,6 +254,7 @@ export const SAMPLE_BARCODES = [
   { code: '5026555416970', name: 'Grand Theft Auto V' },
   { code: '3391892015097', name: 'Elden Ring (PS5)' },
   { code: '0045496590741', name: 'Super Mario Odyssey (Switch)' },
+  { code: '5026555358996', name: 'Red Dead Redemption 2 (Xbox One)' },
   { code: '5026555424233', name: 'Red Dead Redemption 2 (PS4)' },
   { code: '0889842880770', name: 'Forza Horizon 5 (Xbox)' },
   { code: '0045496428457', name: 'Metroid Dread (Switch)' }

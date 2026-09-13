@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings } from 'lucide-react';
+import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings, Loader2, ExternalLink } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
-import { BARCODE_CATALOG, lookupBarcodeInCatalog, findGameInCatalog } from '../data/barcodeCatalog';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
@@ -28,6 +27,8 @@ interface AddGameModalProps {
   initialBarcode?: string;
   existingGames?: Game[];
   onUpdateQuantity?: (gameId: string, newQuantity: number) => void;
+  onUpdateGamePrice?: (gameId: string, newPrice: number) => void;
+  onUpdateGame?: (updated: Game) => void;
   onOpenSettings?: () => void;
 }
 
@@ -39,6 +40,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   initialBarcode = '',
   existingGames = [],
   onUpdateQuantity,
+  onUpdateGamePrice,
+  onUpdateGame,
   onOpenSettings,
 }) => {
   const [activeTab, setActiveTab] = useState<'barcode' | 'manual'>(
@@ -77,8 +80,55 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   // Lookup state
   const [isSearching, setIsSearching] = useState(false);
   const [lookupMessage, setLookupMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
+  const [titleSuggestions, setTitleSuggestions] = useState<any[]>([]);
 
   if (!isOpen) return null;
+
+  const applyGameDetails = (g: {
+    title: string;
+    console?: string;
+    releaseYear?: number;
+    publisher?: string;
+    developer?: string;
+    genre?: string;
+    synopsis?: string;
+    estimatedValue?: number;
+    coverUrl?: string;
+    barcode?: string;
+  }) => {
+    if (g.title) setTitle(g.title);
+    if (g.console) {
+      if (CONSOLE_LIST.includes(g.console as any)) {
+        setConsoleName(g.console);
+      } else {
+        setConsoleName('Autre');
+        setCustomConsole(g.console);
+      }
+    }
+    if (g.barcode && !barcode) setBarcode(g.barcode);
+    if (g.releaseYear) setReleaseYear(g.releaseYear);
+    if (g.publisher) setPublisher(g.publisher);
+    if (g.developer) setDeveloper(g.developer);
+    if (g.genre) setGenre(g.genre);
+    if (g.synopsis && !notes) setNotes(g.synopsis);
+    const targetConsole = g.console || consoleName;
+    const marketCote = estimateMarketValue(g.title, targetConsole, condition);
+    const finalEstimated = (typeof g.estimatedValue === 'number' && g.estimatedValue > 0)
+      ? g.estimatedValue
+      : marketCote;
+    setEstimatedValue(finalEstimated);
+    if (g.coverUrl) {
+      setCoverUrl(getSafeCoverUrl(g.coverUrl));
+    } else {
+      fetch(`/api/games/find-cover?title=${encodeURIComponent(g.title)}&console=${encodeURIComponent(targetConsole)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.coverUrl) setCoverUrl(getSafeCoverUrl(d.coverUrl));
+        })
+        .catch(() => {});
+    }
+    setTitleSuggestions([]);
+  };
 
   const resetForm = () => {
     setTitle('');
@@ -100,6 +150,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     setPurchasePrice('');
     setStockUpdatedSuccess(null);
     setLookupMessage(null);
+    setTitleSuggestions([]);
   };
 
   const handleClose = () => {
@@ -143,80 +194,33 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       if (localMatch.genre) setGenre(localMatch.genre);
       if (localMatch.coverUrl) setCoverUrl(localMatch.coverUrl);
       if (localMatch.notes) setNotes(localMatch.notes);
+      if (localMatch.condition) setCondition(localMatch.condition);
+      if (localMatch.status) setStatus(localMatch.status);
+      if (localMatch.rating) setRating(localMatch.rating);
+      if (typeof localMatch.purchasePrice === 'number') setPurchasePrice(localMatch.purchasePrice);
 
-      setLookupMessage({
-        type: 'warning',
-        text: `Ce jeu est déjà dans votre stock (${localMatch.quantity || 1} exemplaire${(localMatch.quantity || 1) > 1 ? 's' : ''}). Vous pouvez mettre à jour la quantité directement ci-dessous !`,
-      });
-      setIsSearching(false);
-      setActiveTab('manual');
-      return;
-    }
+      // Calculer et mettre à jour immédiatement la cote d'occasion actuelle
+      const freshCote = estimateMarketValue(localMatch.title, localMatch.console, localMatch.condition);
+      setEstimatedValue(freshCote);
 
-    // 2. Fast check in BARCODE_CATALOG (instant 0ms resolution)
-    const catMatch = lookupBarcodeInCatalog(cleanCode);
-    if (catMatch) {
-      setTitle(catMatch.title || '');
-      if (CONSOLE_LIST.includes(catMatch.console as any)) {
-        setConsoleName(catMatch.console);
-      } else {
-        setConsoleName('Autre');
-        setCustomConsole(catMatch.console || '');
+      // Mettre à jour automatiquement la cote occasion du jeu existant dans la collection
+      if (onUpdateGamePrice) {
+        onUpdateGamePrice(localMatch.id, freshCote);
       }
-      if (catMatch.releaseYear) setReleaseYear(catMatch.releaseYear);
-      if (catMatch.publisher) setPublisher(catMatch.publisher);
-      if (catMatch.developer) setDeveloper(catMatch.developer);
-      if (catMatch.genre) setGenre(catMatch.genre);
-      if (catMatch.coverUrl) setCoverUrl(getSafeCoverUrl(catMatch.coverUrl));
-      if (catMatch.synopsis && !notes) setNotes(catMatch.synopsis);
-      setEstimatedValue(estimateMarketValue(catMatch.title, catMatch.console, condition));
 
       setLookupMessage({
         type: 'success',
-        text: `Jeu identifié avec succès par code-barres : "${catMatch.title}" (${catMatch.console}). Toutes les informations ont été pré-remplies !`,
+        text: `Jeu déjà en stock : "${localMatch.title}" (${localMatch.console}) • Cote occasion actualisée à ${freshCote} € (${localMatch.quantity || 1} exemplaire${(localMatch.quantity || 1) > 1 ? 's' : ''})`,
       });
       setIsSearching(false);
       setActiveTab('manual');
       return;
     }
 
-    const presetMatch = INITIAL_GAMES.find((g) => {
-      if (!g.barcode) return false;
-      const bClean = g.barcode.trim();
-      if (bClean === cleanCode) return true;
-      const bDigits = bClean.replace(/\D/g, '');
-      if (bDigits && bDigits === codeDigits) return true;
-      const bUnpadded = bDigits.replace(/^0+/, '');
-      return bUnpadded && bUnpadded === codeUnpadded && codeUnpadded.length >= 7;
-    });
-    if (presetMatch) {
-      setTitle(presetMatch.title || '');
-      if (CONSOLE_LIST.includes(presetMatch.console as any)) {
-        setConsoleName(presetMatch.console);
-      } else {
-        setConsoleName('Autre');
-        setCustomConsole(presetMatch.console || '');
-      }
-      if (presetMatch.releaseYear) setReleaseYear(presetMatch.releaseYear);
-      if (presetMatch.publisher) setPublisher(presetMatch.publisher);
-      if (presetMatch.developer) setDeveloper(presetMatch.developer);
-      if (presetMatch.genre) setGenre(presetMatch.genre);
-      if (presetMatch.coverUrl) setCoverUrl(getSafeCoverUrl(presetMatch.coverUrl));
-      if (presetMatch.notes && !notes) setNotes(presetMatch.notes);
-      setEstimatedValue(estimateMarketValue(presetMatch.title, presetMatch.console, condition));
-
-      setLookupMessage({
-        type: 'success',
-        text: `Jeu identifié : "${presetMatch.title}" (${presetMatch.console}). Vérifiez les informations ci-dessous et enregistrez !`,
-      });
-      setIsSearching(false);
-      setActiveTab('manual');
-      return;
-    }
-
+    // 2. Pure live web search for this barcode
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       const res = await fetch('/api/games/lookup-barcode', {
         method: 'POST',
@@ -229,90 +233,64 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       const data = await res.json();
 
       if (data.found && data.game) {
-        const g = data.game;
-        setTitle(g.title || '');
-        if (CONSOLE_LIST.includes(g.console)) {
-          setConsoleName(g.console);
-        } else {
-          setConsoleName('Autre');
-          setCustomConsole(g.console || '');
-        }
-        if (g.releaseYear) setReleaseYear(g.releaseYear);
-        if (g.publisher) setPublisher(g.publisher);
-        if (g.developer) setDeveloper(g.developer);
-        if (g.genre) setGenre(g.genre);
-        if (g.synopsis && !notes) setNotes(g.synopsis);
-        if (typeof g.estimatedValue === 'number' && g.estimatedValue > 0) {
-          setEstimatedValue(g.estimatedValue);
-        } else {
-          setEstimatedValue(estimateMarketValue(g.title, g.console, condition));
-        }
-        if (g.coverUrl) {
-          setCoverUrl(getSafeCoverUrl(g.coverUrl));
-        } else {
-          fetch(`/api/games/find-cover?title=${encodeURIComponent(g.title)}&console=${encodeURIComponent(g.console || '')}`)
-            .then((r) => r.json())
-            .then((d) => {
-              if (d.coverUrl) setCoverUrl(getSafeCoverUrl(d.coverUrl));
-            })
-            .catch(() => {});
+        applyGameDetails({ ...data.game, barcode: cleanCode });
+
+        const freshCote = (typeof data.game.estimatedValue === 'number' && data.game.estimatedValue > 0)
+          ? data.game.estimatedValue
+          : estimateMarketValue(data.game.title, data.game.console, condition);
+
+        // Si ce jeu existait déjà sous un autre format/code dans le stock, actualiser sa cote
+        const alreadyInStock = existingGames.find(
+          (g) => g.title.toLowerCase().trim() === data.game.title.toLowerCase().trim() &&
+                 g.console.toLowerCase().trim() === (data.game.console || '').toLowerCase().trim()
+        );
+        if (alreadyInStock) {
+          if (onUpdateGamePrice) {
+            onUpdateGamePrice(alreadyInStock.id, freshCote);
+          }
+          if (onUpdateGame && !alreadyInStock.barcode) {
+            onUpdateGame({ ...alreadyInStock, barcode: cleanCode, estimatedValue: freshCote });
+          }
         }
 
         setLookupMessage({
           type: 'success',
-          text: `Jeu identifié : "${g.title}" sur ${g.console}. Vérifiez les informations ci-dessous et enregistrez !`,
+          text: `Jeu identifié en direct sur le web : "${data.game.title}" (${data.game.console}) • Cote occasion actualisée : ${freshCote} €`,
         });
+        setIsSearching(false);
         setActiveTab('manual');
-      } else {
-        setLookupMessage({
-          type: 'warning',
-          text: data.message || `Code-barres (${cleanCode}) mémorisé avec succès ! Entrez le nom du jeu ci-dessous pour compléter la fiche.`,
-        });
-        setActiveTab('manual');
+        return;
       }
     } catch {
-      setLookupMessage({
-        type: 'warning',
-        text: `Code-barres (${cleanCode}) mémorisé. Entrez le titre du jeu ci-dessous pour compléter automatiquement la fiche.`,
-      });
-      setActiveTab('manual');
-    } finally {
-      setIsSearching(false);
+      // ignore network errors
     }
+
+    // Aucun jeu trouvé via la recherche web en direct : on n'utilise aucune base interne
+    setLookupMessage({
+      type: 'warning',
+      text: `Recherche web effectuée pour "${cleanCode}" : aucun jeu vidéo trouvé directement. Entrez le titre du jeu ci-dessous ou consultez la recherche Google.`,
+    });
+    setActiveTab('manual');
+    setIsSearching(false);
   };
 
-  const handleAiEnrich = async () => {
-    if (!title.trim()) return;
+  const handleAiEnrich = async (overrideTitle?: string, overrideConsole?: string) => {
+    const searchTitle = (overrideTitle || title).trim();
+    if (!searchTitle) return;
     setIsSearching(true);
     setLookupMessage(null);
+    setTitleSuggestions([]);
 
-    const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
-
-    // Immediate fast local enrichment
-    const localHit = findGameInCatalog(title, targetConsole) || findGameInCatalog(title);
-    if (localHit) {
-      if (localHit.console && (!consoleName || consoleName === 'Nintendo Switch' || consoleName === 'Autre')) {
-        setConsoleName(localHit.console);
-      }
-      if (!releaseYear && localHit.releaseYear) setReleaseYear(localHit.releaseYear);
-      if (!publisher && localHit.publisher) setPublisher(localHit.publisher);
-      if (!developer && localHit.developer) setDeveloper(localHit.developer);
-      if (!genre && localHit.genre) setGenre(localHit.genre);
-      if (!notes && localHit.synopsis) setNotes(localHit.synopsis);
-      if (!coverUrl && localHit.coverUrl) setCoverUrl(getSafeCoverUrl(localHit.coverUrl));
-      if (estimatedValue === '') {
-        setEstimatedValue(estimateMarketValue(localHit.title, localHit.console, condition));
-      }
-    }
+    const targetConsole = overrideConsole || (consoleName === 'Autre' ? customConsole : consoleName);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       const res = await fetch('/api/games/search-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getGeminiAuthHeaders() },
-        body: JSON.stringify({ query: title, console: targetConsole }),
+        body: JSON.stringify({ query: searchTitle, console: targetConsole, barcode: barcode || undefined }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -320,40 +298,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       const data = await res.json();
       if (data.results && data.results.length > 0) {
         const best = data.results[0];
-        if (best.console && (!consoleName || consoleName === 'Nintendo Switch' || consoleName === 'Autre')) {
-          setConsoleName(best.console);
-        }
-        if (!releaseYear && best.releaseYear) setReleaseYear(best.releaseYear);
-        if (!publisher && best.publisher) setPublisher(best.publisher);
-        if (!developer && best.developer) setDeveloper(best.developer);
-        if (!genre && best.genre) setGenre(best.genre);
-        if (!notes && best.synopsis) setNotes(best.synopsis);
-        if (estimatedValue === '') {
-          if (typeof best.estimatedValue === 'number' && best.estimatedValue > 0) {
-            setEstimatedValue(best.estimatedValue);
-          } else {
-            setEstimatedValue(estimateMarketValue(best.title, best.console || targetConsole, condition));
-          }
-        }
-        if (best.coverUrl) {
-          setCoverUrl(getSafeCoverUrl(best.coverUrl));
-        } else {
-          // Attempt to find cover
-          fetch(`/api/games/find-cover?title=${encodeURIComponent(best.title)}&console=${encodeURIComponent(best.console || targetConsole)}`)
-            .then((r) => r.json())
-            .then((d) => {
-              if (d.coverUrl) setCoverUrl(getSafeCoverUrl(d.coverUrl));
-            })
-            .catch(() => {});
-        }
+        applyGameDetails(best);
         setLookupMessage({
           type: 'success',
           text: `Détails et jaquette enrichis automatiquement pour "${best.title}" !`,
-        });
-      } else if (localHit) {
-        setLookupMessage({
-          type: 'success',
-          text: `Détails enrichis pour "${localHit.title}" (${localHit.console}) !`,
         });
       } else {
         setLookupMessage({
@@ -362,17 +310,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         });
       }
     } catch {
-      if (localHit) {
-        setLookupMessage({
-          type: 'success',
-          text: `Détails enrichis pour "${localHit.title}" (${localHit.console}) !`,
-        });
-      } else {
-        setLookupMessage({
-          type: 'warning',
-          text: 'Recherche d\'enrichissement temporairement indisponible. Vous pouvez saisir les détails manuellement.',
-        });
-      }
+      setLookupMessage({
+        type: 'warning',
+        text: 'Recherche d\'enrichissement temporairement indisponible. Vous pouvez saisir les détails manuellement.',
+      });
     } finally {
       setIsSearching(false);
     }
@@ -384,18 +325,6 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     setLookupMessage(null);
 
     const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
-
-    // Check catalog first
-    const localHit = findGameInCatalog(title, targetConsole) || findGameInCatalog(title);
-    if (localHit?.coverUrl) {
-      setCoverUrl(getSafeCoverUrl(localHit.coverUrl));
-      setLookupMessage({
-        type: 'success',
-        text: 'Jaquette officielle trouvée et chargée avec succès !',
-      });
-      setIsSearching(false);
-      return;
-    }
 
     try {
       const controller = new AbortController();
@@ -430,12 +359,26 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   };
 
   const handleIncrementStock = (targetGame: Game) => {
-    if (!onUpdateQuantity) return;
     const currentQty = targetGame.quantity || 1;
     const newQty = currentQty + quantityToAdd;
-    onUpdateQuantity(targetGame.id, newQty);
+    const freshCote = typeof estimatedValue === 'number' && estimatedValue > 0
+      ? estimatedValue
+      : estimateMarketValue(targetGame.title, targetGame.console, targetGame.condition);
+
+    if (onUpdateGame) {
+      onUpdateGame({
+        ...targetGame,
+        quantity: newQty,
+        estimatedValue: freshCote,
+        barcode: targetGame.barcode || (barcode.trim() || undefined),
+      });
+    } else {
+      if (onUpdateQuantity) onUpdateQuantity(targetGame.id, newQty);
+      if (onUpdateGamePrice) onUpdateGamePrice(targetGame.id, freshCote);
+    }
+
     setStockUpdatedSuccess(
-      `Stock mis à jour ! "${targetGame.title}" (${targetGame.console}) compte désormais ${newQty} exemplaire${newQty > 1 ? 's' : ''}.`
+      `Stock et cote mis à jour ! "${targetGame.title}" (${targetGame.console}) compte désormais ${newQty} exemplaire${newQty > 1 ? 's' : ''} (Cote : ${freshCote} €).`
     );
     setTimeout(() => {
       handleClose();
@@ -481,6 +424,22 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     const calculatedEstimatedValue = typeof estimatedValue === 'number'
       ? estimatedValue
       : estimateMarketValue(title.trim(), finalConsole, condition);
+
+    // Si le jeu existe déjà en stock, mettre à jour la quantité et la cote
+    if (primaryStockMatch && onUpdateGame) {
+      onUpdateGame({
+        ...primaryStockMatch,
+        quantity: (primaryStockMatch.quantity || 1) + (quantity > 0 ? quantity : 1),
+        estimatedValue: calculatedEstimatedValue,
+        barcode: primaryStockMatch.barcode || (barcode.trim() || undefined),
+        condition,
+        status,
+        rating,
+        notes: notes.trim() || primaryStockMatch.notes,
+      });
+      handleClose();
+      return;
+    }
 
     onAddGame({
       title: title.trim(),
@@ -543,8 +502,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
             }`}
           >
-            <Barcode className="w-3.5 h-3.5 text-cyan-400" />
-            <span>SCANNER CODE-BARRES</span>
+            {isSearching ? (
+              <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+            ) : (
+              <Barcode className="w-3.5 h-3.5 text-cyan-400" />
+            )}
+            <span>{isSearching ? 'RECHERCHE EN COURS...' : 'SCANNER CODE-BARRES'}</span>
           </button>
           <button
             id="tab-manual"
@@ -560,6 +523,24 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
             <span>SAISIE MANUELLE {barcode ? '(CODE LIÉ)' : ''}</span>
           </button>
         </div>
+
+        {/* Searching Indicator Banner */}
+        {isSearching && (
+          <div className="mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-center gap-3 border bg-amber-950/80 text-amber-200 border-amber-500/60 font-medium shrink-0 font-retro animate-pulse shadow-md">
+            <div className="w-7 h-7 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-400/40">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-amber-300 flex items-center gap-1.5">
+                <span>RECHERCHE EN COURS...</span>
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              </p>
+              <p className="text-[11px] text-amber-200/80 truncate">
+                {barcode ? `Code-barres : ${barcode} — Interrogation des bases de données de jeux...` : 'Analyse et identification du jeu vidéo en cours...'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Feedback message */}
         {stockUpdatedSuccess ? (
@@ -607,6 +588,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
           {activeTab === 'barcode' ? (
             <BarcodeScanner
               onBarcodeDetected={handleBarcodeDetected}
+              onTitleSearch={(searchedTitle) => {
+                setTitle(searchedTitle);
+                setActiveTab('manual');
+                handleAiEnrich(searchedTitle);
+              }}
               isLoading={isSearching}
               existingGames={existingGames}
               autoStart={true}
@@ -639,6 +625,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                         </span>
                         <span className="text-xs font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-md border border-amber-500/40">
                           Stock actuel : {primaryStockMatch.quantity || 1} exemplaire{(primaryStockMatch.quantity || 1) > 1 ? 's' : ''}
+                        </span>
+                        <span className="text-xs font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/40 flex items-center gap-1">
+                          <Coins className="w-3 h-3 text-emerald-400" />
+                          Cote : {typeof estimatedValue === 'number' && estimatedValue > 0 ? `${estimatedValue} €` : `${primaryStockMatch.estimatedValue || estimateMarketValue(primaryStockMatch.title, primaryStockMatch.console, primaryStockMatch.condition)} €`}
                         </span>
                       </div>
 
@@ -679,14 +669,33 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleIncrementStock(primaryStockMatch)}
-                        className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold font-pixel shadow-sm flex items-center gap-1.5 cursor-pointer transition"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Mettre à jour le stock (Passer à {(primaryStockMatch.quantity || 1) + quantityToAdd} ex.)
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleIncrementStock(primaryStockMatch)}
+                          className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold font-pixel shadow-sm flex items-center gap-1.5 cursor-pointer transition"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Mettre à jour le stock (Passer à {(primaryStockMatch.quantity || 1) + quantityToAdd} ex.) & la cote
+                        </button>
+                        {onUpdateGamePrice && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const freshVal = typeof estimatedValue === 'number' && estimatedValue > 0
+                                ? estimatedValue
+                                : estimateMarketValue(primaryStockMatch.title, primaryStockMatch.console, primaryStockMatch.condition);
+                              onUpdateGamePrice(primaryStockMatch.id, freshVal);
+                              setStockUpdatedSuccess(`Cote occasion actualisée à ${freshVal} € !`);
+                              setTimeout(() => handleClose(), 1200);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-pixel shadow-sm flex items-center gap-1.5 cursor-pointer transition"
+                          >
+                            <Coins className="w-3.5 h-3.5" />
+                            Actualiser la cote ({typeof estimatedValue === 'number' && estimatedValue > 0 ? estimatedValue : estimateMarketValue(primaryStockMatch.title, primaryStockMatch.console, primaryStockMatch.condition)} €)
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -708,14 +717,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
               )}
 
               {/* Title & AI Autofill */}
-              <div className="font-retro">
+              <div className="font-retro relative">
                 <div className="flex items-center justify-between mb-1">
                   <label htmlFor="game-title" className="text-xs font-bold font-pixel text-slate-300">
                     NOM DU JEU *
                   </label>
                   <button
                     type="button"
-                    onClick={handleAiEnrich}
+                    onClick={() => handleAiEnrich()}
                     disabled={!title.trim() || isSearching}
                     className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-medium flex items-center gap-1 cursor-pointer disabled:opacity-40"
                   >
@@ -723,15 +732,97 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     Compléter avec l'IA
                   </button>
                 </div>
-                <input
-                  id="game-title"
-                  type="text"
-                  required
-                  placeholder="Ex: Super Mario Odyssey, Elden Ring..."
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-                />
+                <div className="relative">
+                  <input
+                    id="game-title"
+                    type="text"
+                    required
+                    placeholder="Ex: Need for Speed The Run, Super Mario Odyssey..."
+                    value={title}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTitle(val);
+                      if (lookupMessage?.type === 'warning') setLookupMessage(null);
+                      if (val.trim().length >= 2) {
+                        const q = val.toLowerCase().trim();
+                        const matched = existingGames
+                          .filter((g) => g.title.toLowerCase().includes(q))
+                          .slice(0, 5)
+                          .map((g) => ({
+                            title: g.title,
+                            console: g.console,
+                            coverUrl: g.coverUrl,
+                            genre: g.genre,
+                            releaseYear: g.releaseYear,
+                            publisher: g.publisher,
+                            developer: g.developer,
+                          }));
+                        setTitleSuggestions(matched);
+                      } else {
+                        setTitleSuggestions([]);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAiEnrich();
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                  />
+                  {title && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTitle('');
+                        setTitleSuggestions([]);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs cursor-pointer p-1"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Instant Title Suggestions Dropdown */}
+                {titleSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-[#0d121f] border border-amber-500/50 rounded-xl shadow-2xl overflow-hidden p-1.5 space-y-1">
+                    <div className="text-[10px] font-pixel text-amber-400/80 px-2 py-1 flex items-center gap-1.5 border-b border-slate-800">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>SUGGESTIONS AUTOMATIQUES (CLIQUEZ POUR REMPLIR) :</span>
+                    </div>
+                    {titleSuggestions.map((sug, idx) => (
+                      <button
+                        key={`${sug.title}-${sug.console}-${idx}`}
+                        type="button"
+                        onClick={() => applyGameDetails(sug)}
+                        className="w-full text-left p-2 rounded-lg hover:bg-amber-400/10 hover:border-amber-400/40 border border-transparent transition flex items-center justify-between gap-2 cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {sug.coverUrl && (
+                            <img
+                              src={getSafeCoverUrl(sug.coverUrl)}
+                              alt=""
+                              className="w-7 h-9 object-contain bg-black/40 rounded border border-slate-700/60 shrink-0"
+                              referrerPolicy="no-referrer"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-200 group-hover:text-amber-300 truncate">
+                              {sug.title}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {sug.console} {sug.releaseYear ? `• ${sug.releaseYear}` : ''} {sug.genre ? `• ${sug.genre}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-pixel text-amber-400 shrink-0 opacity-80 group-hover:opacity-100">
+                          Sélectionner →
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Console selection */}
@@ -743,7 +834,15 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                   <select
                     id="game-console"
                     value={consoleName}
-                    onChange={(e) => setConsoleName(e.target.value)}
+                    onChange={(e) => {
+                      const newCons = e.target.value;
+                      setConsoleName(newCons);
+                      if (title.trim()) {
+                        const targetC = newCons === 'Autre' ? customConsole : newCons;
+                        const val = estimateMarketValue(title, targetC, condition);
+                        setEstimatedValue(val);
+                      }
+                    }}
                     className="w-full px-3 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 cursor-pointer"
                   >
                     {CONSOLE_LIST.map((c) => (
@@ -794,24 +893,38 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                     <label htmlFor="game-barcode" className="text-xs font-bold font-pixel text-slate-300">
                       CODE-BARRES (EAN/UPC)
                     </label>
-                    {barcode.replace(/\D/g, '').length >= 6 && (
-                      <button
-                        type="button"
-                        onClick={() => handleBarcodeDetected(barcode)}
-                        disabled={isSearching}
-                        className="text-[10px] text-cyan-400 hover:text-cyan-300 font-pixel font-bold flex items-center gap-1 cursor-pointer"
-                        title="Rechercher directement à partir de ce code-barres"
-                      >
-                        <Search className="w-3 h-3" />
-                        <span>Identifier</span>
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {barcode.trim().length >= 4 && (
+                        <a
+                          href={`https://www.google.com/search?q=${encodeURIComponent(barcode.trim())}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-slate-400 hover:text-amber-300 font-pixel flex items-center gap-1 transition"
+                          title="Ouvrir la recherche Google pour ce code-barres"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Voir sur Google</span>
+                        </a>
+                      )}
+                      {barcode.replace(/\D/g, '').length >= 6 && (
+                        <button
+                          type="button"
+                          onClick={() => handleBarcodeDetected(barcode)}
+                          disabled={isSearching}
+                          className="text-[10px] text-cyan-400 hover:text-cyan-300 font-pixel font-bold flex items-center gap-1 cursor-pointer"
+                          title="Lancer la recherche web en direct pour ce code-barres"
+                        >
+                          <Search className="w-3 h-3" />
+                          <span>Rechercher sur le web</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-1.5">
                     <input
                       id="game-barcode"
                       type="text"
-                      placeholder="Ex: 5030932111822..."
+                      placeholder="Ex: 5026555358996..."
                       value={barcode}
                       onChange={(e) => setBarcode(e.target.value)}
                       onKeyDown={(e) => {
@@ -829,14 +942,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                       onClick={() => handleBarcodeDetected(barcode)}
                       disabled={isSearching || barcode.replace(/\D/g, '').length < 6}
                       className="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-amber-300 font-pixel text-[10px] rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0"
-                      title="Identifier automatiquement le jeu avec ce code-barres"
+                      title="Lancer la recherche web en direct avec ce code-barres"
                     >
                       <Search className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Identifier</span>
+                      <span className="hidden sm:inline">Identifier (Web)</span>
                     </button>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    Tapez ou collez un code et cliquez sur Identifier pour trouver le jeu sans taper le titre.
+                    Recherche en direct sur internet pour chaque code entré (aucune base interne fixe).
                   </p>
                 </div>
                 <div>
@@ -893,7 +1006,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
                   <select
                     id="game-condition"
                     value={condition}
-                    onChange={(e) => setCondition(e.target.value as GameCondition)}
+                    onChange={(e) => {
+                      const newCond = e.target.value as GameCondition;
+                      setCondition(newCond);
+                      if (title.trim()) {
+                        const val = estimateMarketValue(title, finalConsole, newCond);
+                        setEstimatedValue(val);
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-400 cursor-pointer"
                   >
                     {Object.entries(CONDITION_LABELS).map(([k, v]) => (
