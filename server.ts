@@ -58,7 +58,19 @@ function getAi(customKey?: string): GoogleGenAI | null {
 let geminiDisabledUntil = 0;
 let geminiPermanentlyDisabled = false;
 
-const GEMINI_MODELS = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
+// Multi-model rotation supporting active Google AI Studio Flash models
+// Prioritizes responsive models with independent free-tier quotas (gemini-3.7-flash, gemini-3.5-flash, gemini-3.5-flash-lite, etc.)
+const GEMINI_MODELS = [
+  'gemini-3.7-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3-flash-preview',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+  'gemini-3.6-flash',
+];
 
 function isGeminiAvailable(customKey?: string): boolean {
   if (customKey && customKey.trim().length > 5) {
@@ -70,24 +82,17 @@ function isGeminiAvailable(customKey?: string): boolean {
 }
 
 function markGeminiFailure(err?: any, isCustomKey: boolean = false) {
-  if (isCustomKey) return;
+  if (isCustomKey) return; // Never disable server for custom key errors
   const errMsg = typeof err === 'string' ? err : (err?.message || JSON.stringify(err || ''));
-  if (/dunning|PERMISSION_DENIED|403|billing|API_KEY_INVALID/i.test(errMsg)) {
-    if (activeServerApiKey !== USER_FALLBACK_KEY) {
-      activeServerApiKey = USER_FALLBACK_KEY;
-      aiClient = null;
-      geminiPermanentlyDisabled = false;
-      geminiDisabledUntil = 0;
-      return;
-    }
-    geminiDisabledUntil = Date.now() + 5 * 60 * 1000;
-  } else {
-    geminiDisabledUntil = Date.now() + 5 * 60 * 1000;
+  // Never disable globally for 429 (rate limits/quotas) or 503 (high demand) because another model in the list can succeed!
+  if (/dunning|ACCOUNT_SUSPENDED|BILLING_DISABLED/i.test(errMsg)) {
+    geminiPermanentlyDisabled = true;
+    geminiDisabledUntil = Date.now() + 60 * 60 * 1000;
   }
 }
 
 // Resilient Gemini JSON caller with multi-model fallback and markdown fence stripping
-async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: number = 8000): Promise<any> {
+async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: number = 6000): Promise<any> {
   let lastErr: any = null;
   for (const model of GEMINI_MODELS) {
     try {
@@ -108,7 +113,8 @@ async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: nu
     } catch (err: any) {
       lastErr = err;
       const msg = err?.message || String(err);
-      if (/API_KEY_INVALID|INVALID_ARGUMENT|API key not valid/i.test(msg)) {
+      console.warn(`[Gemini] Modèle ${model} non disponible (${err?.status || 'erreur'}): ${msg.slice(0, 100)}, essai du modèle suivant...`);
+      if (/API_KEY_INVALID|INVALID_ARGUMENT.*API key not valid/i.test(msg)) {
         break; // Key is explicitly invalid, stop checking other models
       }
       continue;
@@ -122,7 +128,7 @@ async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: nu
   try {
     const ai = getAi();
     if (ai) {
-      for (const model of ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash']) {
+      for (const model of ['gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest']) {
         try {
           await withTimeout(
             ai.models.generateContent({
@@ -144,6 +150,18 @@ async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: nu
     markGeminiFailure(err);
   }
 })();
+
+function extractNumericValue(val: any, fallback: number): number {
+  if (typeof val === 'number' && !isNaN(val) && val >= 0) return Math.round(val);
+  if (typeof val === 'string') {
+    const m = val.match(/(\d+(?:[.,]\d+)?)/);
+    if (m) {
+      const n = parseFloat(m[1].replace(',', '.'));
+      if (!isNaN(n) && n >= 0) return Math.round(n);
+    }
+  }
+  return fallback;
+}
 
 // Clean barcode string
 function normalizeBarcode(code: string): string {
@@ -492,14 +510,48 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   }
 
   // Extract clean game titles from raw titles
-  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking)/i;
+  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|cologne|eau\s*de|fragrance|deodorant|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking|vinyl|album|audio\s*cd|cassette|3lp|2cd|discogs|record\b|dress|shirt|shoes|jacket|apparel)/i;
 
-  const cleanCandidates: string[] = [];
+  function scoreGameCandidate(candidate: string, fullContext: string): number {
+    let score = 0;
+    const t = candidate.toLowerCase();
+    const ctx = fullContext.toLowerCase();
+
+    if (nonGameRegex.test(t)) return -100;
+
+    // Contexte éditeur de jeux vidéo majeur
+    if (/(?:capcom|nintendo|sony|playstation|xbox|ubisoft|square enix|konami|bandai|namco|electronic arts|ea sports|sega|bethesda|rockstar|cd projekt|atlus|fromsoftware|activision|blizzard|2k games|warner bros|koei|tecmo|snk)/i.test(t)) {
+      score += 45;
+    } else if (/(?:capcom|nintendo|playstation|xbox|ubisoft|square enix|konami|bandai|namco|sega|bethesda|rockstar|cd projekt|atlus|fromsoftware|activision|blizzard)/i.test(ctx)) {
+      score += 25;
+    }
+
+    // Plateforme de jeu vidéo mentionnée
+    if (/\b(?:ps5|ps4|ps3|ps2|ps1|playstation|xbox|switch|snes|nes|gamecube|wii|n64|game boy|gba|ds|3ds|xone)\b/i.test(t)) {
+      score += 35;
+    }
+
+    // Termes typiques de jeux vidéo
+    if (/\b(?:jeu|game|videogame|action|rpg|aventure|remaster|edition|collector|deluxe|bundle|fighter|warriors)\b/i.test(t)) {
+      score += 15;
+    }
+
+    // Séries de jeux cultes
+    if (/\b(?:mega man|mario|zelda|pokemon|pokémon|sonic|final fantasy|resident evil|gta|grand theft auto|call of duty|halo|forza|gears|witcher|souls|elden ring|dragon quest|monster hunter|assassin'?s creed|fifa|pes|nba 2k|street fighter|tekken|crash bandicoot|spyro|castlevania)\b/i.test(t)) {
+      score += 50;
+    }
+
+    return score;
+  }
+
+  const cleanCandidates: Array<{ title: string; score: number }> = [];
   for (const t of rawTitles) {
     if (nonGameRegex.test(t)) continue;
     let s = t;
     s = s.replace(/^Third\s*Party\s*[-–:]\s*/i, '');
-    s = s.replace(/\s*[-–|]\s*(?:eBay.*|Amazon.*|Fnac.*|Rakuten.*|Cdiscount.*|Micromania.*|Bigshopper.*|Buycott.*|worldofbooks.*|Waterstones.*)$/i, '');
+    s = s.replace(/\s*[-–|]\s*(?:eBay.*|Amazon.*|Fnac.*|Rakuten.*|Cdiscount.*|Micromania.*|Bigshopper.*|Buycott.*|worldofbooks.*|Waterstones.*|HMV.*)$/i, '');
+    s = s.replace(/^CAPCOM\s*(?:France|Europe|USA)?\s*/i, '');
+    s = s.replace(/^(?:Nintendo|Sony|Ubisoft|Square Enix|Konami|Bandai Namco|Sega|Bethesda|Rockstar Games|Electronic Arts|EA Games|Activision)\s*/i, '');
     s = s.replace(/^Take\s*2\s*(?:NG\s*)?/i, '');
     s = s.replace(/^New\s+/i, '');
     s = s.replace(/^Jeu\s*(?:PS[1-5]|Xbox|Switch|Wii|Sony)?\s*/i, '');
@@ -507,9 +559,9 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     s = s.replace(/\s*\[.*?\]|\s*\(.*?\)/g, '');
     s = s.replace(/\b\d{10,13}\b/g, '');
     s = s.replace(/^EAN\s*[-–:]*\s*/i, '');
-    s = s.replace(/\s*\|\s*UPC\s*Lookup.*$/i, '');
-    s = s.replace(/\s*(?:PS[1-5]|PlayStation\s*[1-5]|Xbox\s*(?:360|One|Series)?|Nintendo\s*(?:Switch|64|DS)?)\s*/gi, ' ');
-    s = s.replace(/\s*\b(?:Import\s*(?:Fr|UK|US|JP|EU|Japon)|Edition\s*Standard|Version\s*(?:Française|FR|UK|US)|PAL\s*FR|French\s*Version)\b.*$/i, '');
+    s = s.replace(/\s*\|\s*(?:UPC\s*Lookup|Buy\s*.*)$/i, '');
+    s = s.replace(/\s*(?:PS[1-5]|PlayStation\s*[1-5]|Xbox\s*(?:360|One|Series)?|Nintendo\s*(?:Switch|64|DS)?|XONE)\s*/gi, ' ');
+    s = s.replace(/\s*\b(?:Import\s*(?:Fr|UK|US|JP|EU|Japon)|Edition\s*Standard|Version\s*(?:Française|FR|UK|US)|PAL\s*FR|French\s*Version|VF|VO|VOSTFR)\b.*$/i, '');
     s = s.replace(/\s*VideoGames\s*$/i, '');
     s = s.replace(/\s*Game\s*$/i, '');
     s = s.replace(/\s*Rockstar\s*UK.*$/i, '');
@@ -517,8 +569,12 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     s = s.replace(/\s*:\s*/g, ': ');
     s = s.trim().replace(/\s+/g, ' ');
 
+    // Normalize common roman numeral titles
+    if (/^MEGA MAN XI$/i.test(s)) s = 'Mega Man 11';
+
     if (s.length >= 3 && !nonGameRegex.test(s) && !/^(?:Call Of Duty Ps3|Amazon|Ebay|Good condition|Department|Undergraduate|Finance|Fonctionne|Track a Package)$/i.test(s)) {
-      cleanCandidates.push(s);
+      const score = scoreGameCandidate(t, allTexts.join(' '));
+      cleanCandidates.push({ title: s, score });
     }
   }
 
@@ -532,14 +588,12 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     return null;
   }
 
-  // Select the most frequent and clean title
-  const counts: Record<string, number> = {};
-  for (const c of cleanCandidates) {
-    const key = c.toLowerCase().replace(/[:\-_]/g, ' ').replace(/\s+/g, ' ').trim();
-    counts[key] = (counts[key] || 0) + 1;
-  }
-  const topKey = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
-  const bestTitle = cleanCandidates.find(c => c.toLowerCase().replace(/[:\-_]/g, ' ').replace(/\s+/g, ' ').trim() === topKey) || cleanCandidates[0];
+  // Sort candidates by gaming score first, then frequency
+  cleanCandidates.sort((a, b) => b.score - a.score);
+  const bestCandidate = cleanCandidates[0];
+  if (bestCandidate.score < -50) return null;
+
+  const bestTitle = bestCandidate.title;
 
   return {
     title: bestTitle,
@@ -547,7 +601,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     releaseYear: detectedYear,
     publisher: detectedPublisher,
     genre: guessGameGenre(bestTitle),
-    rawText: allTexts.slice(0, 5).join(' | ').slice(0, 500)
+    rawText: allTexts.slice(0, 8).join(' | ').slice(0, 600)
   };
 }
 
@@ -1068,7 +1122,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict au format suivant :
                 developer: parsed.developer || undefined,
                 genre: parsed.genre || onlineHint?.genre || guessGameGenre(parsed.title),
                 synopsis: parsed.synopsis || undefined,
-                estimatedValue: typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0 ? parsed.estimatedValue : guessEstimatedValue(parsed.title, parsed.console || 'Autre', searchSnippets),
+                estimatedValue: extractNumericValue(parsed.estimatedValue, guessEstimatedValue(parsed.title, parsed.console || 'Autre', searchSnippets)),
                 barcode: cleanCode,
                 confidence: 'high',
                 coverUrl: autoCoverUrl || opfImage || undefined,
@@ -1185,10 +1239,16 @@ Réponds EXCLUSIVEMENT avec un tableau JSON strict [ { ... }, ... ] où chaque o
 
           const aiList = await generateGeminiJson(ai, prompt, 8000);
           if (Array.isArray(aiList) && aiList.length > 0) {
-            results = aiList;
+            results = aiList.map(item => ({
+              ...item,
+              estimatedValue: extractNumericValue(item.estimatedValue, 10)
+            }));
             aiSuccess = true;
           } else if (aiList && typeof aiList === 'object' && aiList.title) {
-            results = [aiList];
+            results = [{
+              ...aiList,
+              estimatedValue: extractNumericValue(aiList.estimatedValue, 10)
+            }];
             aiSuccess = true;
           }
         } catch (aiErr: any) {
@@ -1322,11 +1382,11 @@ app.post('/api/gemini/validate-key', async (req, res) => {
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
     });
 
-    // Tester avec les modèles supportés : gemini-3.6-flash, gemini-flash-latest, gemini-3.7-flash, gemini-3.8-flash
+    // Tester avec les modèles supportés : gemini-3.7-flash, gemini-3.5-flash, gemini-3.5-flash-lite, gemini-3.8-flash, gemini-flash-latest
     let success = false;
     let lastError: any = null;
 
-    for (const modelName of ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.8-flash']) {
+    for (const modelName of ['gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest']) {
       try {
         await withTimeout(
           ai.models.generateContent({

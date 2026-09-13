@@ -738,6 +738,9 @@ export default function App() {
           setIsGuideOpen(false);
           handleOpenAddModal(true);
         }}
+        games={games}
+        onImportGames={handleImportGames}
+        onResetSample={handleResetSample}
       />
 
       <UpdatePricesModal

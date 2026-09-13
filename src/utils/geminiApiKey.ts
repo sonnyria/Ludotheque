@@ -47,6 +47,17 @@ export function getGeminiAuthHeaders(): Record<string, string> {
   return {};
 }
 
+export const CLIENT_GEMINI_MODELS = [
+  'gemini-3.7-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+  'gemini-3.6-flash',
+];
+
 /**
  * Validates a Gemini API key with the backend and direct fallback
  */
@@ -117,9 +128,8 @@ export async function validateGeminiApiKey(
   }
 
   // 2. Fallback de secours direct auprès de Google Generative Language API (navigateur -> Google)
-  // Utilise les modèles actifs Google AI Studio (gemini-3.8-flash, gemini-3.6-flash, gemini-flash-latest)
   try {
-    for (const model of ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest']) {
+    for (const model of CLIENT_GEMINI_MODELS) {
       try {
         const googleRes = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`,
@@ -203,4 +213,44 @@ export async function validateGeminiApiKey(
       error: directErr?.message,
     };
   }
+}
+
+/**
+ * Direct browser fallback to Google Gemini when server proxy is slow, rate-limited or offline
+ */
+export async function callDirectGeminiJson(prompt: string, userKey?: string): Promise<any> {
+  const key = (userKey || getStoredGeminiApiKey()).trim();
+  if (!key) return null;
+
+  for (const model of CLIENT_GEMINI_MODELS) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key,
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        }
+      );
+
+      if (!res.ok) continue;
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!rawText) continue;
+
+      const cleaned = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+    } catch {
+      // Continue to next model
+    }
+  }
+  return null;
 }

@@ -5,7 +5,7 @@ import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGame
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
-import { getGeminiAuthHeaders, hasStoredGeminiApiKey } from '../utils/geminiApiKey';
+import { getGeminiAuthHeaders, hasStoredGeminiApiKey, getStoredGeminiApiKey, callDirectGeminiJson } from '../utils/geminiApiKey';
 
 export function getSafeCoverUrl(url?: string): string {
   if (!url) return '';
@@ -220,12 +220,13 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     // 2. Pure live web search for this barcode
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(), 18000);
+      const userKey = getStoredGeminiApiKey();
 
       const res = await fetch('/api/games/lookup-barcode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getGeminiAuthHeaders() },
-        body: JSON.stringify({ barcode: cleanCode }),
+        body: JSON.stringify({ barcode: cleanCode, apiKey: userKey || undefined }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -261,8 +262,66 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         setActiveTab('manual');
         return;
       }
+
+      // Si le serveur n'a rien trouvé mais que l'utilisateur a configuré sa clé Gemini, tenter un secours direct
+      if (!data.found && hasStoredGeminiApiKey()) {
+        try {
+          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques. Le code-barres EAN/UPC suivant se trouve sur la boîte d'un jeu vidéo console : "${cleanCode}".
+Identifie avec exactitude le jeu vidéo correspondant. Réponds avec un JSON strict :
+{
+  "title": "titre officiel du jeu",
+  "console": "console (ex: Nintendo Switch, PlayStation 4, Xbox One, etc.)",
+  "releaseYear": 2018,
+  "publisher": "éditeur",
+  "genre": "genre en français",
+  "synopsis": "résumé en 1 phrase",
+  "estimatedValue": 15
+}`;
+          const directData = await callDirectGeminiJson(directPrompt, userKey);
+          if (directData && directData.title) {
+            applyGameDetails({ ...directData, barcode: cleanCode });
+            setLookupMessage({
+              type: 'success',
+              text: `Jeu identifié par IA Gemini : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
+            });
+            setIsSearching(false);
+            setActiveTab('manual');
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
     } catch {
-      // ignore network errors
+      // Fallback secours direct navigateur si le serveur est inaccessible
+      if (hasStoredGeminiApiKey()) {
+        try {
+          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques. Le code-barres EAN/UPC suivant se trouve sur la boîte d'un jeu vidéo console : "${cleanCode}".
+Identifie avec exactitude le jeu vidéo correspondant. Réponds avec un JSON strict :
+{
+  "title": "titre officiel du jeu",
+  "console": "console (ex: Nintendo Switch, PlayStation 4, Xbox One, etc.)",
+  "releaseYear": 2018,
+  "publisher": "éditeur",
+  "genre": "genre en français",
+  "synopsis": "résumé en 1 phrase",
+  "estimatedValue": 15
+}`;
+          const directData = await callDirectGeminiJson(directPrompt);
+          if (directData && directData.title) {
+            applyGameDetails({ ...directData, barcode: cleanCode });
+            setLookupMessage({
+              type: 'success',
+              text: `Jeu identifié par IA Gemini : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
+            });
+            setIsSearching(false);
+            setActiveTab('manual');
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
 
     // Aucun jeu trouvé via la recherche web en direct : on n'utilise aucune base interne
@@ -282,15 +341,21 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     setTitleSuggestions([]);
 
     const targetConsole = overrideConsole || (consoleName === 'Autre' ? customConsole : consoleName);
+    const userKey = getStoredGeminiApiKey();
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
       const res = await fetch('/api/games/search-gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getGeminiAuthHeaders() },
-        body: JSON.stringify({ query: searchTitle, console: targetConsole, barcode: barcode || undefined }),
+        body: JSON.stringify({
+          query: searchTitle,
+          console: targetConsole,
+          barcode: barcode || undefined,
+          apiKey: userKey || undefined,
+        }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -303,13 +368,72 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
           type: 'success',
           text: `Détails et jaquette enrichis automatiquement pour "${best.title}" !`,
         });
-      } else {
-        setLookupMessage({
-          type: 'warning',
-          text: data.message || 'Aucun détail supplémentaire trouvé automatiquement pour ce titre.',
-        });
+        return;
       }
+
+      // Si le serveur n'a rien renvoyé mais que l'utilisateur a sa clé Gemini
+      if (hasStoredGeminiApiKey()) {
+        const directPrompt = `Tu es une encyclopédie de jeux vidéo. L'utilisateur veut enrichir la fiche du jeu suivant :
+Titre : "${searchTitle}"
+${targetConsole ? `Console : "${targetConsole}"` : ''}
+Réponds EXCLUSIVEMENT avec un objet JSON strict :
+{
+  "title": "titre officiel complet",
+  "console": "${targetConsole || 'console principale'}",
+  "releaseYear": 2018,
+  "publisher": "éditeur",
+  "developer": "développeur",
+  "genre": "genre en français",
+  "synopsis": "résumé en français en 1 ou 2 phrases",
+  "estimatedValue": 15
+}`;
+        const directData = await callDirectGeminiJson(directPrompt, userKey);
+        if (directData && directData.title) {
+          applyGameDetails(directData);
+          setLookupMessage({
+            type: 'success',
+            text: `Fiche enrichie par IA Gemini pour "${directData.title}" !`,
+          });
+          return;
+        }
+      }
+
+      setLookupMessage({
+        type: 'warning',
+        text: data.message || 'Aucun détail supplémentaire trouvé automatiquement pour ce titre.',
+      });
     } catch {
+      // Secours direct client
+      if (hasStoredGeminiApiKey()) {
+        try {
+          const directPrompt = `Tu es une encyclopédie de jeux vidéo. L'utilisateur veut enrichir la fiche du jeu suivant :
+Titre : "${searchTitle}"
+${targetConsole ? `Console : "${targetConsole}"` : ''}
+Réponds EXCLUSIVEMENT avec un objet JSON strict :
+{
+  "title": "titre officiel complet",
+  "console": "${targetConsole || 'console principale'}",
+  "releaseYear": 2018,
+  "publisher": "éditeur",
+  "developer": "développeur",
+  "genre": "genre en français",
+  "synopsis": "résumé en français en 1 ou 2 phrases",
+  "estimatedValue": 15
+}`;
+          const directData = await callDirectGeminiJson(directPrompt, userKey);
+          if (directData && directData.title) {
+            applyGameDetails(directData);
+            setLookupMessage({
+              type: 'success',
+              text: `Fiche enrichie avec succès par IA Gemini pour "${directData.title}" !`,
+            });
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       setLookupMessage({
         type: 'warning',
         text: 'Recherche d\'enrichissement temporairement indisponible. Vous pouvez saisir les détails manuellement.',
