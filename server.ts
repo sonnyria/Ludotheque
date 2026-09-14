@@ -59,17 +59,12 @@ let geminiDisabledUntil = 0;
 let geminiPermanentlyDisabled = false;
 
 // Multi-model rotation supporting active Google AI Studio Flash models
-// Prioritizes responsive models with independent free-tier quotas (gemini-3.7-flash, gemini-3.5-flash, gemini-3.5-flash-lite, etc.)
+// Prioritizes fast, responsive models with independent quotas
 const GEMINI_MODELS = [
-  'gemini-3.7-flash',
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
-  'gemini-3.1-flash-lite',
-  'gemini-flash-lite-latest',
-  'gemini-3-flash-preview',
-  'gemini-3.8-flash',
-  'gemini-flash-latest',
   'gemini-3.6-flash',
+  'gemini-3.7-flash',
 ];
 
 function isGeminiAvailable(customKey?: string): boolean {
@@ -84,17 +79,16 @@ function isGeminiAvailable(customKey?: string): boolean {
 function markGeminiFailure(err?: any, isCustomKey: boolean = false) {
   if (isCustomKey) return; // Never disable server for custom key errors
   const errMsg = typeof err === 'string' ? err : (err?.message || JSON.stringify(err || ''));
-  // Never disable globally for 429 (rate limits/quotas) or 503 (high demand) because another model in the list can succeed!
   if (/dunning|ACCOUNT_SUSPENDED|BILLING_DISABLED/i.test(errMsg)) {
     geminiPermanentlyDisabled = true;
     geminiDisabledUntil = Date.now() + 60 * 60 * 1000;
   }
 }
 
-// Resilient Gemini JSON caller with multi-model fallback and markdown fence stripping
-async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: number = 6000): Promise<any> {
+// Resilient Gemini JSON caller with multi-model fallback and fast timeouts (max 3.5s per model)
+async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: number = 3500): Promise<any> {
   let lastErr: any = null;
-  for (const model of GEMINI_MODELS) {
+  for (const model of GEMINI_MODELS.slice(0, 3)) {
     try {
       const response = await withTimeout(
         ai.models.generateContent({
@@ -113,7 +107,6 @@ async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: nu
     } catch (err: any) {
       lastErr = err;
       const msg = err?.message || String(err);
-      console.warn(`[Gemini] Modèle ${model} non disponible (${err?.status || 'erreur'}): ${msg.slice(0, 100)}, essai du modèle suivant...`);
       if (/API_KEY_INVALID|INVALID_ARGUMENT.*API key not valid/i.test(msg)) {
         break; // Key is explicitly invalid, stop checking other models
       }
@@ -294,7 +287,33 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
 
   // 1. Parallel Multi-Engine Live Search across DuckDuckGo, Buycott, Bing & OpenProductsFacts
   const liveQueries = [
-    // 1a. DuckDuckGo HTML direct search (Finds product listings, eBay, Buycott, worldofbooks, etc.)
+    // 1a. DuckDuckGo HTML exact quoted search for the barcode (finds exact eBay/Amazon/PriceCharting product listings)
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const ddgRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent('"' + cleanCode + '"')}`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+        if (ddgRes.ok) {
+          const html = await ddgRes.text();
+          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
+            const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+            if (t) rawTitles.push(t);
+          }
+          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
+            const s = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+            if (s) rawSnippets.push(s);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })(),
+
+    // 1b. DuckDuckGo unquoted search
     (async () => {
       try {
         const controller = new AbortController();
@@ -510,7 +529,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   }
 
   // Extract clean game titles from raw titles
-  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|cologne|eau\s*de|fragrance|deodorant|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking|vinyl|album|audio\s*cd|cassette|3lp|2cd|discogs|record\b|dress|shirt|shoes|jacket|apparel)/i;
+  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|cologne|eau\s*de|fragrance|deodorant|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking|vinyl|album|audio\s*cd|cassette|3lp|2cd|discogs|record\b|dress|shirt|shoes|jacket|apparel|anniversary\b|tour\b|live\s*in\b|remastered\s*vinyl)/i;
 
   function scoreGameCandidate(candidate: string, fullContext: string): number {
     let score = 0;
@@ -561,16 +580,19 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     s = s.replace(/^EAN\s*[-–:]*\s*/i, '');
     s = s.replace(/\s*\|\s*(?:UPC\s*Lookup|Buy\s*.*)$/i, '');
     s = s.replace(/\s*(?:PS[1-5]|PlayStation\s*[1-5]|Xbox\s*(?:360|One|Series)?|Nintendo\s*(?:Switch|64|DS)?|XONE)\s*/gi, ' ');
-    s = s.replace(/\s*\b(?:Import\s*(?:Fr|UK|US|JP|EU|Japon)|Edition\s*Standard|Version\s*(?:Française|FR|UK|US)|PAL\s*FR|French\s*Version|VF|VO|VOSTFR)\b.*$/i, '');
+    s = s.replace(/\s*\b(?:Occasion|Used|Jeu\s*Vid[eé]o|Video\s*Game|Import\s*(?:Fr|UK|US|JP|EU|Japon)|Edition\s*Standard|Version\s*(?:Française|FR|UK|US)|PAL\s*FR|French\s*Version|VF|VO|VOSTFR|PAL|NEUF|NEW)\b/gi, ' ');
+    s = s.replace(/\s*\b(?:for|pour|on|sur|für)\b/gi, ' ');
     s = s.replace(/\s*VideoGames\s*$/i, '');
     s = s.replace(/\s*Game\s*$/i, '');
     s = s.replace(/\s*Rockstar\s*UK.*$/i, '');
     s = s.replace(/\s*[-–:]\s*$/, '');
     s = s.replace(/\s*:\s*/g, ': ');
     s = s.trim().replace(/\s+/g, ' ');
+    s = s.replace(/\s*[-–:]\s*$/, '').trim();
 
     // Normalize common roman numeral titles
-    if (/^MEGA MAN XI$/i.test(s)) s = 'Mega Man 11';
+    if (/^MEGA MAN XI\b/i.test(s)) s = 'Mega Man 11';
+    if (/^MEGA MAN 11\b/i.test(s)) s = 'Mega Man 11';
 
     if (s.length >= 3 && !nonGameRegex.test(s) && !/^(?:Call Of Duty Ps3|Amazon|Ebay|Good condition|Department|Undergraduate|Finance|Fonctionne|Track a Package)$/i.test(s)) {
       const score = scoreGameCandidate(t, allTexts.join(' '));
@@ -605,14 +627,73 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   };
 }
 
-// Fast box art cover search via Steam, Wikipedia & live web in parallel (< 600ms)
-async function findOfficialCover(title: string, consoleName: string = ''): Promise<string | null> {
-  if (!title || !title.trim()) return null;
+export interface CoverOption {
+  url: string;
+  rawUrl: string;
+  thumb?: string;
+  title?: string;
+  source?: string;
+}
+
+// Multi-engine cover search combining DuckDuckGo Images, Wikipedia, Steam & Bing (< 700ms)
+async function findOfficialCovers(title: string, consoleName: string = ''): Promise<{ bestCover: string | null; covers: CoverOption[] }> {
+  if (!title || !title.trim()) return { bestCover: null, covers: [] };
 
   const cleanTitle = title.replace(/\s*\(.*?\)/g, '').replace(/\s*:\s*/g, ': ').trim();
+  const covers: CoverOption[] = [];
+  const seenUrls = new Set<string>();
 
-  // 1. Direct Wikipedia title lookup (fastest & most accurate: e.g. "Titanfall (video game)", "Titanfall")
-  const searchWikiDirect = async (domain: string): Promise<string | null> => {
+  const addCover = (rawUrl: string, thumb?: string, itemTitle?: string, source?: string) => {
+    if (!rawUrl || typeof rawUrl !== 'string') return;
+    if (seenUrls.has(rawUrl)) return;
+    seenUrls.add(rawUrl);
+
+    if (/(avatar|profile|wallpaper|screenshot|gameplay|walkthrough|banner_full|_logo\b|logo\.)/i.test(rawUrl) || /\blogo\b/i.test(itemTitle || '')) {
+      return;
+    }
+
+    const proxiedUrl = `/api/covers/proxy?url=${encodeURIComponent(rawUrl)}${thumb ? `&fallback=${encodeURIComponent(thumb)}` : ''}`;
+    covers.push({
+      url: proxiedUrl,
+      rawUrl,
+      thumb: thumb || rawUrl,
+      title: itemTitle || `${cleanTitle} ${consoleName}`.trim(),
+      source: source || 'web'
+    });
+  };
+
+  // 1. DuckDuckGo Image Search (real web index for official game box arts)
+  const searchDDG = async () => {
+    try {
+      const q = `${cleanTitle} ${consoleName} jaquette box art`.trim();
+      const initRes = await fetch('https://duckduckgo.com/?q=' + encodeURIComponent(q), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        }
+      });
+      const html = await initRes.text();
+      const vqd = html.match(/vqd=["\x27]?([0-9-_]+)/)?.[1];
+      if (vqd) {
+        const imgRes = await fetch(`https://duckduckgo.com/i.js?l=fr-fr&o=json&q=${encodeURIComponent(q)}&vqd=${vqd}&f=,,,`, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://duckduckgo.com/'
+          }
+        });
+        const data: any = await imgRes.json();
+        for (const item of (data.results || []).slice(0, 10)) {
+          if (item?.image) {
+            addCover(item.image, item.thumbnail, item.title, 'web');
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // 2. Wikipedia direct pageimages lookup
+  const searchWikiDirect = async (domain: string) => {
     try {
       const titlesList = [
         `${cleanTitle} (video game)`,
@@ -625,102 +706,107 @@ async function findOfficialCover(title: string, consoleName: string = ''): Promi
       const titlesQuery = titlesList.map(t => encodeURIComponent(t.trim())).join('|');
       const url = `https://${domain}/w/api.php?action=query&titles=${titlesQuery}&prop=pageimages&pilicense=any&pithumbsize=600&redirects=1&format=json`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
+      const timeout = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
+        headers: { 'User-Agent': 'GameVaultApp/1.0 Mozilla/5.0' }
       });
       clearTimeout(timeout);
-      if (!res.ok) return null;
+      if (!res.ok) return;
       const data: any = await res.json();
       const pages: any[] = Object.values(data?.query?.pages || {});
       const best = pages.find(p => p?.thumbnail?.source && /video game|jeu vid/i.test(p.title || '')) ||
                    pages.find(p => p?.thumbnail?.source);
       if (best?.thumbnail?.source) {
-        return `/api/covers/proxy?url=${encodeURIComponent(best.thumbnail.source)}`;
+        addCover(best.thumbnail.source, best.thumbnail.source, best.title, 'Wikipedia');
       }
     } catch {
       // ignore
     }
-    return null;
   };
 
-  // 3. Steam API with sequel mismatch guard
-  const searchSteam = async (): Promise<string | null> => {
+  // 3. Steam official store assets
+  const searchSteam = async () => {
     try {
       const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(cleanTitle)}&l=french&cc=FR`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
-      if (!res.ok) return null;
+      if (!res.ok) return;
       const data: any = await res.json();
       const apps = (data?.items || []).slice(0, 3);
       for (const app of apps) {
         if (app?.id && app?.name) {
           const queryHasDigit = /\b(\d+|ii|iii|iv|v|vi)\b/i.test(cleanTitle);
           const appHasDigit = /\b([2-9]|\d{2,}|ii|iii|iv|v|vi)\b/i.test(app.name);
-          if (!queryHasDigit && appHasDigit) {
-            continue;
-          }
+          if (!queryHasDigit && appHasDigit) continue;
           const cover = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/library_600x900.jpg`;
-          try {
-            const headRes = await fetch(cover, { method: 'HEAD' });
-            if (headRes.ok) return cover;
-          } catch {}
-          const header = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/header.jpg`;
-          try {
-            const headRes = await fetch(header, { method: 'HEAD' });
-            if (headRes.ok) return header;
-          } catch {}
+          addCover(cover, cover, app.name, 'Steam');
+          break;
         }
       }
     } catch {
       // ignore
     }
-    return null;
   };
 
-  const searchWikiSearch = async (domain: string, query: string): Promise<string | null> => {
+  // 4. Bing Images fallback if needed
+  const searchBing = async () => {
     try {
-      const url = `https://${domain}/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=1&prop=pageimages&pilicense=any&pithumbsize=600&format=json`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: { 'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0' }
+      const q = `${cleanTitle} ${consoleName} jaquette`.trim();
+      const bingUrl = `https://www.bing.com/images/search?q=${encodeURIComponent(q)}&first=1`;
+      const res = await fetch(bingUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8'
+        }
       });
-      clearTimeout(timeout);
-      if (!res.ok) return null;
-      const data: any = await res.json();
-      const page: any = Object.values(data?.query?.pages || {})[0];
-      if (page?.thumbnail?.source && typeof page.thumbnail.source === 'string') {
-        return `/api/covers/proxy?url=${encodeURIComponent(page.thumbnail.source)}`;
+      const html = await res.text();
+      for (const m of html.matchAll(/murl&quot;:&quot;(https?:\/\/[^&"]+)&quot;/g)) {
+        const url = m[1];
+        if (/\.(jpg|jpeg|png|webp)/i.test(url)) {
+          addCover(url, undefined, cleanTitle, 'Bing');
+          if (covers.length >= 6) break;
+        }
       }
     } catch {
       // ignore
     }
-    return null;
   };
 
-  const queries = [
+  await Promise.allSettled([
+    searchDDG(),
     searchWikiDirect('en.wikipedia.org'),
     searchWikiDirect('fr.wikipedia.org'),
-    searchSteam(),
-    searchWikiSearch('en.wikipedia.org', `${cleanTitle} video game`),
-    searchWikiSearch('fr.wikipedia.org', `${cleanTitle} jeu vidéo`),
-    searchWikiSearch('en.wikipedia.org', cleanTitle),
-  ];
+    searchSteam()
+  ]);
 
-  try {
-    const results = await Promise.all(queries);
-    const valid = results.find(r => typeof r === 'string' && r.length > 0);
-    if (valid) return valid;
-  } catch {
-    // ignore
+  if (covers.length === 0) {
+    await searchBing();
   }
 
-  return null;
+  // Prioritize authentic box arts, covers and reputable gaming databases
+  covers.sort((a, b) => {
+    const score = (c: CoverOption) => {
+      let s = 0;
+      const combined = `${c.rawUrl} ${c.title}`.toLowerCase();
+      if (/jaquette|boxart|box-art|capa|front-cover|front_cover|cover/i.test(combined)) s += 6;
+      if (/mobygames|video-games-museum|bdjogos|gamecash|picclick|covercentury|mariowiki/i.test(combined)) s += 4;
+      if (/wikipedia\.org\/wikipedia\/en/i.test(c.rawUrl)) s += 3;
+      if (c.source === 'Steam') s += 2;
+      return s;
+    };
+    return score(b) - score(a);
+  });
+
+  const bestCover = covers.length > 0 ? covers[0].url : null;
+  return { bestCover, covers };
+}
+
+async function findOfficialCover(title: string, consoleName: string = ''): Promise<string | null> {
+  const { bestCover } = await findOfficialCovers(title, consoleName);
+  return bestCover;
 }
 
 // Fallback search engine using Wikipedia video game APIs & Steam (ultra fast & parallel)
@@ -905,64 +991,86 @@ const FALLBACK_COVER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" 
 
 // Proxy endpoint for cover images to prevent CORS, missing Referer and hotlink errors
 app.get('/api/covers/proxy', async (req, res) => {
-  let targetUrl = '';
+  let targetUrl = (req.query.url as string) || '';
+  let fallbackUrl = (req.query.fallback as string) || '';
+
   const original = req.originalUrl || req.url;
-  const idx = original.indexOf('?url=');
-  if (idx !== -1) {
-    targetUrl = original.slice(idx + 5);
-  } else {
-    targetUrl = (req.query.url as string) || '';
-  }
-
-  // Handle single or double encoding
-  try {
-    targetUrl = decodeURIComponent(targetUrl);
-    if (targetUrl.includes('%') && /%[0-9A-Fa-f]{2}/.test(targetUrl)) {
-      targetUrl = decodeURIComponent(targetUrl);
+  const urlIdx = original.indexOf('url=');
+  if (urlIdx !== -1) {
+    const queryPart = original.slice(urlIdx + 4);
+    const ampIdx = queryPart.indexOf('&fallback=');
+    if (ampIdx !== -1) {
+      targetUrl = queryPart.slice(0, ampIdx);
+      fallbackUrl = queryPart.slice(ampIdx + 10);
+    } else {
+      targetUrl = queryPart;
     }
-  } catch {
-    // Keep decoded so far
   }
 
-  if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.send(FALLBACK_COVER_SVG);
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const response = await fetch(targetUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'GameVaultApp/1.0 (https://gamecollection.local; contact@gamecollection.local) Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  // Handle single or double URL encoding
+  const cleanUrl = (u: string) => {
+    try {
+      let dec = decodeURIComponent(u);
+      if (dec.includes('%') && /%[0-9A-Fa-f]{2}/.test(dec)) {
+        dec = decodeURIComponent(dec);
       }
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.send(FALLBACK_COVER_SVG);
+      return dec;
+    } catch {
+      return u;
     }
+  };
 
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800');
-    
-    const arrayBuffer = await response.arrayBuffer();
-    return res.send(Buffer.from(arrayBuffer));
-  } catch (err: any) {
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    return res.send(FALLBACK_COVER_SVG);
+  targetUrl = cleanUrl(targetUrl);
+  fallbackUrl = cleanUrl(fallbackUrl);
+
+  const fetchImageData = async (urlToFetch: string) => {
+    if (!urlToFetch || (!urlToFetch.startsWith('http://') && !urlToFetch.startsWith('https://'))) {
+      return null;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    try {
+      const response = await fetch(urlToFetch, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        }
+      });
+      clearTimeout(timeout);
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        if (contentType.startsWith('image/') || contentType.includes('octet-stream')) {
+          const arrayBuffer = await response.arrayBuffer();
+          return { buffer: Buffer.from(arrayBuffer), contentType };
+        }
+      }
+    } catch {
+      clearTimeout(timeout);
+    }
+    return null;
+  };
+
+  // Try primary target first
+  let result = await fetchImageData(targetUrl);
+  // If primary target fails (e.g. 403 Forbidden on hotlinking), try fallback (e.g. CDN thumbnail)
+  if (!result && fallbackUrl) {
+    result = await fetchImageData(fallbackUrl);
   }
+
+  if (result) {
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800');
+    return res.send(result.buffer);
+  }
+
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  return res.send(FALLBACK_COVER_SVG);
 });
 
-// API: Find official cover for any game title & console
-app.get('/api/games/find-cover', async (req, res) => {
+// API: Find official cover for any game title & console with alternative choices
+app.get(['/api/games/find-cover', '/api/games/find-covers'], async (req, res) => {
   try {
     const title = (req.query.title as string) || '';
     const consoleName = (req.query.console as string) || '';
@@ -970,10 +1078,15 @@ app.get('/api/games/find-cover', async (req, res) => {
       return res.status(400).json({ error: 'Titre requis' });
     }
 
-    const coverUrl = await findOfficialCover(title, consoleName);
-    return res.json({ coverUrl: coverUrl || null, title, console: consoleName });
+    const { bestCover, covers } = await findOfficialCovers(title, consoleName);
+    return res.json({
+      coverUrl: bestCover || null,
+      covers: covers || [],
+      title,
+      console: consoleName
+    });
   } catch {
-    return res.json({ coverUrl: null, title: req.query.title || '', console: req.query.console || '' });
+    return res.json({ coverUrl: null, covers: [], title: req.query.title || '', console: req.query.console || '' });
   }
 });
 
@@ -1027,7 +1140,8 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       }
     }
 
-    // 3. Query live internet databases & marketplace indices in real-time (Bing, DuckDuckGo, OpenProductsFacts)
+    // 3. PRIORITIZE DIRECT LIVE WEB SEARCH (Google, Bing, Buycott, DuckDuckGo & OpenProductsFacts)
+    // As requested: the web search is fast and accurate, so we use it directly as the primary source of truth!
     let onlineHint: {
       title: string;
       console: string;
@@ -1073,21 +1187,71 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
 
     const searchSnippets: string[] = [onlineHint?.rawText, opfTitle, opfBrand].filter((t): t is string => Boolean(t && t.trim()));
 
-    // 3. Try Gemini AI identification with online clues
+    // 4. If live web search found a precise game result, return it immediately without AI hallucination
+    if (onlineHint && onlineHint.title) {
+      let autoCover: string | undefined = undefined;
+      try {
+        const fc = await findOfficialCover(onlineHint.title, onlineHint.console);
+        if (fc) autoCover = fc;
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: 'web_search',
+        game: {
+          title: onlineHint.title,
+          console: onlineHint.console,
+          releaseYear: onlineHint.releaseYear,
+          publisher: onlineHint.publisher,
+          developer: onlineHint.developer,
+          genre: onlineHint.genre || guessGameGenre(onlineHint.title),
+          synopsis: `Jeu identifié sur le web pour la console ${onlineHint.console}.`,
+          estimatedValue: guessEstimatedValue(onlineHint.title, onlineHint.console, searchSnippets),
+          barcode: cleanCode,
+          coverUrl: autoCover || undefined,
+          confidence: 'high'
+        }
+      });
+    }
+
+    // 5. If OpenProductsFacts gave a title, return it directly
+    if (opfTitle) {
+      let autoCover: string | undefined = undefined;
+      try {
+        const fc = await findOfficialCover(opfTitle);
+        if (fc) autoCover = fc;
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: 'openproductsfacts',
+        game: {
+          title: opfTitle,
+          console: 'Autre',
+          publisher: opfBrand || undefined,
+          genre: guessGameGenre(opfTitle),
+          estimatedValue: guessEstimatedValue(opfTitle, 'Autre', searchSnippets),
+          barcode: cleanCode,
+          coverUrl: autoCover || opfImage || undefined,
+          confidence: 'medium'
+        }
+      });
+    }
+
+    // 6. Optional fallback: If web search found nothing at all, only then try Gemini AI if available
     const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
       if (ai) {
         try {
-          const clueText = onlineHint
-            ? `Indices en direct trouvés sur le web pour ce code-barres : Titre: "${onlineHint.title}", Console: "${onlineHint.console}", Année: ${onlineHint.releaseYear || 'inconnue'}, Éditeur: "${onlineHint.publisher || 'inconnu'}".`
-            : (opfTitle ? `Nom du produit détecté sur OpenProductsFacts : "${opfTitle}" (${opfBrand || ''}).` : '');
-
           const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo pour consoles, et spécialiste de l'Argus du marché français et européen (Mister Game Price, ventes effectives eBay France en Euros, Vinted et LeBonCoin).
 Le code-barres EAN/UPC suivant a été scanné sur la boîte d'un jeu vidéo physique : "${cleanCode}".
-${clueText}
 
-Identifie avec la plus grande précision le jeu vidéo exact correspondant.
+Identifie avec la plus grande précision le jeu vidéo exact correspondant s'il s'agit d'un jeu vidéo avéré.
 Réponds EXCLUSIVEMENT avec un objet JSON strict au format suivant :
 {
   "title": "titre officiel complet du jeu vidéo",
@@ -1116,11 +1280,11 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict au format suivant :
               source: 'gemini',
               game: {
                 title: parsed.title,
-                console: parsed.console || onlineHint?.console || 'Autre',
-                releaseYear: parsed.releaseYear || onlineHint?.releaseYear || undefined,
-                publisher: parsed.publisher || onlineHint?.publisher || undefined,
+                console: parsed.console || 'Autre',
+                releaseYear: parsed.releaseYear || undefined,
+                publisher: parsed.publisher || undefined,
                 developer: parsed.developer || undefined,
-                genre: parsed.genre || onlineHint?.genre || guessGameGenre(parsed.title),
+                genre: parsed.genre || guessGameGenre(parsed.title),
                 synopsis: parsed.synopsis || undefined,
                 estimatedValue: extractNumericValue(parsed.estimatedValue, guessEstimatedValue(parsed.title, parsed.console || 'Autre', searchSnippets)),
                 barcode: cleanCode,
@@ -1133,60 +1297,6 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict au format suivant :
           markGeminiFailure(aiErr, Boolean(customApiKey));
         }
       }
-    }
-
-    // 4. If AI is unavailable or failed, use the verified live web search results!
-    if (onlineHint && onlineHint.title) {
-      let autoCover: string | undefined = undefined;
-      try {
-        const fc = await findOfficialCover(onlineHint.title, onlineHint.console);
-        if (fc) autoCover = fc;
-      } catch {
-        // ignore
-      }
-
-      return res.json({
-        found: true,
-        source: 'web_database',
-        game: {
-          title: onlineHint.title,
-          console: onlineHint.console,
-          releaseYear: onlineHint.releaseYear,
-          publisher: onlineHint.publisher,
-          developer: onlineHint.developer,
-          genre: onlineHint.genre || guessGameGenre(onlineHint.title),
-          synopsis: `Jeu identifié sur internet pour la console ${onlineHint.console}.`,
-          estimatedValue: guessEstimatedValue(onlineHint.title, onlineHint.console, searchSnippets),
-          barcode: cleanCode,
-          coverUrl: autoCover || undefined,
-          confidence: 'high'
-        }
-      });
-    }
-
-    if (opfTitle) {
-      let autoCover: string | undefined = undefined;
-      try {
-        const fc = await findOfficialCover(opfTitle);
-        if (fc) autoCover = fc;
-      } catch {
-        // ignore
-      }
-
-      return res.json({
-        found: true,
-        source: 'openproductsfacts',
-        game: {
-          title: opfTitle,
-          console: 'Autre',
-          publisher: opfBrand || undefined,
-          genre: guessGameGenre(opfTitle),
-          estimatedValue: guessEstimatedValue(opfTitle, 'Autre', searchSnippets),
-          barcode: cleanCode,
-          coverUrl: autoCover || opfImage || undefined,
-          confidence: 'medium'
-        }
-      });
     }
 
     // 5. If no game found anywhere online or in database

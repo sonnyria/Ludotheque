@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Edit3, Barcode, Calendar, Building, Code2, Tag, Star, Clock, Check, Sparkles, Boxes, Plus, Minus, AlertTriangle, Coins, TrendingUp, TrendingDown, RefreshCw, ExternalLink } from 'lucide-react';
+import { X, Trash2, Edit3, Barcode, Calendar, Building, Code2, Tag, Star, Clock, Check, Sparkles, Boxes, Plus, Minus, AlertTriangle, Coins, TrendingUp, TrendingDown, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { CONSOLE_LIST } from '../data/sampleGames';
@@ -43,6 +43,8 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
   const [editedRating, setEditedRating] = useState<number>(5);
   const [editedNotes, setEditedNotes] = useState('');
   const [editedCoverUrl, setEditedCoverUrl] = useState('');
+  const [isSearchingCover, setIsSearchingCover] = useState(false);
+  const [coverAlternatives, setCoverAlternatives] = useState<any[]>([]);
   const [editedQuantity, setEditedQuantity] = useState<number>(1);
   const [editedEstimatedValue, setEditedEstimatedValue] = useState<number | ''>('');
   const [editedPurchasePrice, setEditedPurchasePrice] = useState<number | ''>('');
@@ -63,6 +65,8 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
     setEditedRating(game.rating || 5);
     setEditedNotes(game.notes || '');
     setEditedCoverUrl(game.coverUrl || '');
+    setCoverAlternatives([]);
+    setIsSearchingCover(false);
     setEditedQuantity(game.quantity || 1);
     setEditedEstimatedValue(
       game.estimatedValue !== undefined
@@ -408,23 +412,48 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                   <label className="block text-xs font-bold font-pixel text-slate-300">
                     URL DE LA JAQUETTE
                   </label>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!editedTitle.trim()) return;
-                      try {
-                        const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(editedTitle)}&console=${encodeURIComponent(editedConsole)}`);
-                        const d = await res.json();
-                        if (d.coverUrl) setEditedCoverUrl(getSafeCoverUrl(d.coverUrl));
-                      } catch (e) {
-                        // ignore
-                      }
-                    }}
-                    className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    Trouver jaquette officielle
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    {editedTitle.trim() && (
+                      <a
+                        href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${editedTitle} ${editedConsole} jaquette box art`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-sky-400 hover:text-sky-300 font-pixel flex items-center gap-1 cursor-pointer transition hover:underline"
+                        title="Rechercher des images sur Google dans un nouvel onglet"
+                      >
+                        <ExternalLink className="w-3 h-3 text-sky-400" />
+                        Google Images
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      disabled={!editedTitle.trim() || isSearchingCover}
+                      onClick={async () => {
+                        if (!editedTitle.trim()) return;
+                        setIsSearchingCover(true);
+                        try {
+                          const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(editedTitle)}&console=${encodeURIComponent(editedConsole)}`);
+                          const d = await res.json();
+                          if (d.coverUrl) setEditedCoverUrl(getSafeCoverUrl(d.coverUrl));
+                          if (d.covers && Array.isArray(d.covers) && d.covers.length > 0) {
+                            setCoverAlternatives(d.covers);
+                          }
+                        } catch {
+                          // ignore
+                        } finally {
+                          setIsSearchingCover(false);
+                        }
+                      }}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    >
+                      {isSearchingCover ? (
+                        <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      )}
+                      {isSearchingCover ? 'Recherche...' : 'Trouver jaquette'}
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-3 items-center">
                   <input
@@ -446,6 +475,38 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Alternatives */}
+                {coverAlternatives.length > 1 && (
+                  <div className="mt-2.5 p-2 bg-slate-900/80 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400 font-pixel mb-1.5 flex items-center justify-between">
+                      <span className="text-amber-400/90 font-bold">Autres jaquettes trouvées :</span>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                      {coverAlternatives.slice(0, 8).map((alt, idx) => {
+                        const isSelected = editedCoverUrl === alt.url || editedCoverUrl === alt.rawUrl;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setEditedCoverUrl(alt.url || alt.rawUrl)}
+                            className={`w-10 h-14 rounded-lg border overflow-hidden shrink-0 transition cursor-pointer hover:scale-105 bg-slate-950 flex items-center justify-center p-0.5 ${
+                              isSelected ? 'border-amber-400 ring-2 ring-amber-400/80' : 'border-slate-700 opacity-60 hover:opacity-100'
+                            }`}
+                            title={alt.title || 'Choisir cette jaquette'}
+                          >
+                            <img
+                              src={alt.thumb || alt.url}
+                              alt=""
+                              className="w-full h-full object-contain"
+                              referrerPolicy="no-referrer"
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">

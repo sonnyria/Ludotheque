@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   BookOpen,
@@ -24,8 +24,16 @@ import {
   Coins,
   Heart,
   Mail,
-  Copy
+  Copy,
+  Download,
+  Upload,
+  HardDrive,
+  FileSpreadsheet,
+  FileJson,
+  RotateCcw
 } from 'lucide-react';
+import { Game } from '../types';
+import { estimateMarketValue } from '../utils/marketPriceGuide';
 import {
   getStoredGeminiApiKey,
   setStoredGeminiApiKey,
@@ -36,7 +44,10 @@ interface GuideModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenScanner: () => void;
-  initialTab?: 'settings' | 'guide' | 'support';
+  initialTab?: 'settings' | 'backup' | 'guide' | 'support';
+  games?: Game[];
+  onImportGames?: (imported: Game[]) => void;
+  onResetSample?: () => void;
 }
 
 export const GuideModal: React.FC<GuideModalProps> = ({
@@ -44,8 +55,11 @@ export const GuideModal: React.FC<GuideModalProps> = ({
   onClose,
   onOpenScanner,
   initialTab = 'settings',
+  games = [],
+  onImportGames,
+  onResetSample,
 }) => {
-  const [activeTab, setActiveTab] = useState<'settings' | 'guide' | 'support'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'settings' | 'backup' | 'guide' | 'support'>(initialTab);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [savedKey, setSavedKey] = useState('');
@@ -59,6 +73,15 @@ export const GuideModal: React.FC<GuideModalProps> = ({
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPaypal, setCopiedPaypal] = useState(false);
 
+  // Backup & Import state
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importMode, setImportMode] = useState<'replace' | 'merge'>('replace');
+  const [backupMessage, setBackupMessage] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+  } | null>(null);
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+
   // Sync stored key on modal open
   useEffect(() => {
     if (isOpen) {
@@ -66,11 +89,149 @@ export const GuideModal: React.FC<GuideModalProps> = ({
       setSavedKey(stored);
       setApiKeyInput(stored);
       setTestResult({ status: 'idle', message: '' });
+      setBackupMessage(null);
+      setIsConfirmingReset(false);
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
+
+  // Export handlers
+  const handleExportJson = () => {
+    try {
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(games, null, 2));
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute('href', dataStr);
+      dlAnchor.setAttribute('download', `collection_jeux_video_${new Date().toISOString().slice(0, 10)}.json`);
+      dlAnchor.click();
+      setBackupMessage({
+        type: 'success',
+        text: `Fichier JSON téléchargé avec succès (${games.length} jeux sauvegardés).`,
+      });
+    } catch {
+      setBackupMessage({
+        type: 'error',
+        text: 'Erreur lors de la génération du fichier JSON.',
+      });
+    }
+  };
+
+  const handleExportCsv = () => {
+    try {
+      const headers = ['Titre', 'Console', 'Quantite', 'Cote Occasion (€)', 'Prix Achat (€)', 'Code-barres', 'Annee', 'Editeur', 'Developpeur', 'Genre', 'Etat', 'Statut', 'Note'];
+      const rows = games.map((g) => {
+        const estVal = g.estimatedValue !== undefined ? g.estimatedValue : estimateMarketValue(g.title, g.console, g.condition);
+        return [
+          `"${(g.title || '').replace(/"/g, '""')}"`,
+          `"${(g.console || '').replace(/"/g, '""')}"`,
+          g.quantity || 1,
+          estVal,
+          g.purchasePrice !== undefined ? g.purchasePrice : '',
+          `"${g.barcode || ''}"`,
+          g.releaseYear || '',
+          `"${(g.publisher || '').replace(/"/g, '""')}"`,
+          `"${(g.developer || '').replace(/"/g, '""')}"`,
+          `"${(g.genre || '').replace(/"/g, '""')}"`,
+          `"${g.condition || ''}"`,
+          `"${g.status || ''}"`,
+          g.rating || '',
+        ];
+      });
+      const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute('href', encodeURI(csvContent));
+      dlAnchor.setAttribute('download', `collection_jeux_video_${new Date().toISOString().slice(0, 10)}.csv`);
+      dlAnchor.click();
+      setBackupMessage({
+        type: 'success',
+        text: `Fichier CSV/Excel exporté avec succès (${games.length} lignes).`,
+      });
+    } catch {
+      setBackupMessage({
+        type: 'error',
+        text: 'Erreur lors de l\'exportation CSV.',
+      });
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (Array.isArray(json)) {
+          // Validate minimally
+          const validGames = json.filter((item) => item && typeof item === 'object' && typeof item.title === 'string');
+          if (validGames.length === 0) {
+            setBackupMessage({
+              type: 'error',
+              text: 'Le fichier JSON ne contient aucun jeu valide.',
+            });
+            return;
+          }
+
+          if (importMode === 'replace') {
+            if (onImportGames) onImportGames(validGames);
+            setBackupMessage({
+              type: 'success',
+              text: `Collection restaurée avec succès ! (${validGames.length} jeux chargés, ancienne collection remplacée).`,
+            });
+          } else {
+            // Fusionner avec la collection actuelle
+            const existingTitles = new Set(games.map(g => `${g.title.toLowerCase()}___${g.console.toLowerCase()}`));
+            const merged = [...games];
+            let addedCount = 0;
+            let updatedCount = 0;
+
+            for (const item of validGames) {
+              const key = `${item.title.toLowerCase()}___${(item.console || 'Autre').toLowerCase()}`;
+              if (existingTitles.has(key)) {
+                // augment quantity or update
+                const idx = merged.findIndex(g => `${g.title.toLowerCase()}___${g.console.toLowerCase()}` === key);
+                if (idx >= 0) {
+                  merged[idx] = {
+                    ...merged[idx],
+                    quantity: (merged[idx].quantity || 1) + (item.quantity || 1),
+                  };
+                  updatedCount++;
+                }
+              } else {
+                merged.push({
+                  ...item,
+                  id: item.id || `game-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                  addedAt: item.addedAt || new Date().toISOString(),
+                });
+                existingTitles.add(key);
+                addedCount++;
+              }
+            }
+
+            if (onImportGames) onImportGames(merged);
+            setBackupMessage({
+              type: 'success',
+              text: `Importation fusionnée : +${addedCount} nouveaux jeux ajoutés, ${updatedCount} doublons mis à jour (total : ${merged.length} jeux).`,
+            });
+          }
+        } else {
+          setBackupMessage({
+            type: 'error',
+            text: 'Format invalide : le fichier doit être un tableau JSON de jeux.',
+          });
+        }
+      } catch {
+        setBackupMessage({
+          type: 'error',
+          text: 'Erreur lors de la lecture du fichier JSON. Vérifiez la validité du fichier.',
+        });
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleSaveKey = () => {
     const clean = apiKeyInput.trim();
@@ -166,13 +327,13 @@ export const GuideModal: React.FC<GuideModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-bold font-pixel text-amber-300 flex items-center gap-2 tracking-wide">
-                <span>CONFIG & GUIDE</span>
+                <span>PARAMÈTRES & GUIDE</span>
                 <span className="text-[9px] font-bold font-pixel bg-cyan-950/80 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/40">
                   RETROARGUS
                 </span>
               </h3>
               <p className="text-xs text-slate-400 font-retro mt-0.5">
-                Clé IA Gemini, astuces argus & soutien au créateur
+                Clé IA Gemini, Sauvegarde & Import de collection, Guide & Astuces
               </p>
             </div>
           </div>
@@ -204,6 +365,23 @@ export const GuideModal: React.FC<GuideModalProps> = ({
             ) : (
               <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]" title="Clé non configurée" />
             )}
+          </button>
+
+          <button
+            id="tab-btn-backup"
+            type="button"
+            onClick={() => setActiveTab('backup')}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-[10px] sm:text-[11px] font-bold font-pixel rounded-t-xl transition cursor-pointer border-t border-x whitespace-nowrap ${
+              activeTab === 'backup'
+                ? 'bg-[#0f1423] text-emerald-400 border-emerald-500/40 shadow-xs -mb-[1px]'
+                : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-900'
+            }`}
+          >
+            <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Sauvegarde & Import</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+              {games.length}
+            </span>
           </button>
 
           <button
@@ -484,6 +662,276 @@ export const GuideModal: React.FC<GuideModalProps> = ({
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
                   <strong className="text-slate-200">Vie privée & Sécurité :</strong> Votre clé API est conservée <strong>uniquement sur votre propre appareil</strong> (dans le stockage local de votre navigateur). Elle ne transite jamais par un serveur externe autre que les requêtes directes et sécurisées vers Google.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'backup' && (
+            <div className="space-y-5 font-retro">
+              {/* Notification Banner */}
+              {backupMessage && (
+                <div
+                  className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs animate-fadeIn ${
+                    backupMessage.type === 'success'
+                      ? 'bg-[#0a2014] border-emerald-500/50 text-emerald-300'
+                      : backupMessage.type === 'error'
+                      ? 'bg-[#250d14] border-rose-500/50 text-rose-300'
+                      : 'bg-[#0c1a2d] border-cyan-500/50 text-cyan-300'
+                  }`}
+                >
+                  {backupMessage.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  ) : backupMessage.type === 'error' ? (
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="space-y-0.5 flex-1">
+                    <p className="font-semibold">{backupMessage.text}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBackupMessage(null)}
+                    className="text-slate-400 hover:text-white p-1 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Status & Overview */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-[#11192b] to-[#151f36] border border-slate-700/80 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <HardDrive className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold font-pixel text-slate-100">
+                      VOTRE COLLECTION ACTUELLE
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {games.length} jeu{games.length > 1 ? 'x' : ''} enregistré{games.length > 1 ? 's' : ''} ({games.reduce((acc, g) => acc + (g.quantity || 1), 0)} unité{games.reduce((acc, g) => acc + (g.quantity || 1), 0) > 1 ? 's' : ''} au total)
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right hidden sm:block">
+                  <span className="text-[10px] font-pixel text-slate-400 uppercase tracking-wider block">Stockage</span>
+                  <span className="text-xs font-bold text-emerald-400 font-pixel">Local & Privé</span>
+                </div>
+              </div>
+
+              {/* SECTION 1: SAUVEGARDER (EXPORTER) */}
+              <div className="p-4 rounded-xl bg-[#131929] border border-slate-800 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                    <Download className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-cyan-300 font-pixel text-xs">
+                      1. SAUVEGARDER / EXPORTER MA COLLECTION
+                    </h5>
+                    <p className="text-[11px] text-slate-400">
+                      Générez une copie de secours complète à conserver sur votre PC ou smartphone.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Export JSON */}
+                  <button
+                    id="btn-export-json-guide"
+                    type="button"
+                    onClick={handleExportJson}
+                    disabled={games.length === 0}
+                    className="p-3.5 rounded-xl bg-[#0f1424] hover:bg-[#182138] border border-cyan-500/40 hover:border-cyan-400 text-left transition flex items-start gap-3 cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+                  >
+                    <div className="p-2 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-500/30 group-hover:scale-105 transition shrink-0">
+                      <FileJson className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-slate-200 group-hover:text-cyan-300 font-pixel flex items-center gap-1.5">
+                        <span>FORMAT JSON (Recommandé)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                        Sauvegarde intégrale avec jaquettes, cotes personnalisées, états, notes et codes-barres. Idéal pour réimporter.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Export CSV */}
+                  <button
+                    id="btn-export-csv-guide"
+                    type="button"
+                    onClick={handleExportCsv}
+                    disabled={games.length === 0}
+                    className="p-3.5 rounded-xl bg-[#0f1424] hover:bg-[#182138] border border-emerald-500/40 hover:border-emerald-400 text-left transition flex items-start gap-3 cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+                  >
+                    <div className="p-2 rounded-lg bg-emerald-950 text-emerald-300 border border-emerald-500/30 group-hover:scale-105 transition shrink-0">
+                      <FileSpreadsheet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-slate-200 group-hover:text-emerald-300 font-pixel flex items-center gap-1.5">
+                        <span>TABLEUR CSV / EXCEL</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                        Export tabulaire universel compatible Excel, Google Sheets, LibreOffice Calc et tableurs mobiles.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* SECTION 2: IMPORTER / RESTAURER */}
+              <div className="p-4 rounded-xl bg-[#131929] border border-slate-800 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-amber-300 font-pixel text-xs">
+                      2. IMPORTER / RESTAURER UN FICHIER JSON
+                    </h5>
+                    <p className="text-[11px] text-slate-400">
+                      Chargez une sauvegarde pour récupérer votre collection sur cet appareil ou après avoir vidé votre navigateur.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Import Mode Radio Toggle */}
+                <div className="p-3 rounded-lg bg-[#0b0e18] border border-slate-800 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-300 block font-pixel">
+                    MODE D'IMPORTATION :
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <label
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                        importMode === 'replace'
+                          ? 'bg-amber-950/30 border-amber-500/50 text-amber-200'
+                          : 'bg-[#111726] border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="importModeGuide"
+                        checked={importMode === 'replace'}
+                        onChange={() => setImportMode('replace')}
+                        className="mt-0.5 accent-amber-400"
+                      />
+                      <div>
+                        <span className="font-bold block text-slate-200 font-pixel text-[10px]">REMPLACER LA COLLECTION</span>
+                        <span className="text-[10px] text-slate-400">Remplace l'ensemble des jeux actuels par ceux du fichier.</span>
+                      </div>
+                    </label>
+
+                    <label
+                      className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                        importMode === 'merge'
+                          ? 'bg-cyan-950/30 border-cyan-500/50 text-cyan-200'
+                          : 'bg-[#111726] border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="importModeGuide"
+                        checked={importMode === 'merge'}
+                        onChange={() => setImportMode('merge')}
+                        className="mt-0.5 accent-cyan-400"
+                      />
+                      <div>
+                        <span className="font-bold block text-slate-200 font-pixel text-[10px]">FUSIONNER / AJOUTER</span>
+                        <span className="text-[10px] text-slate-400">Ajoute les nouveaux jeux sans effacer votre collection existante.</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Hidden File Input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="guide-file-import-input"
+                />
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                  <button
+                    id="btn-select-import-file"
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold font-pixel text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-sm active:translate-y-0.5"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>CHOISIR UN FICHIER JSON</span>
+                  </button>
+                  <span className="text-[11px] text-slate-400 text-center sm:text-left">
+                    Fichiers <code className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300">.json</code> issus de RetroArgus
+                  </span>
+                </div>
+              </div>
+
+              {/* SECTION 3: REINITIALISER AVEC LES JEUX EXEMPLES */}
+              {onResetSample && (
+                <div className="p-4 rounded-xl bg-[#131929] border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                        <RotateCcw className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-slate-200 font-pixel text-xs">
+                          RÉINITIALISER LA COLLECTION D'EXEMPLE
+                        </h5>
+                        <p className="text-[11px] text-slate-400">
+                          Recharger la sélection rétro témoin (Mario, Zelda, Sonic, Final Fantasy, etc.)
+                        </p>
+                      </div>
+                    </div>
+
+                    {!isConfirmingReset ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsConfirmingReset(true)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-700 hover:border-rose-500/60 text-slate-400 hover:text-rose-300 hover:bg-rose-950/20 text-xs font-bold font-pixel transition cursor-pointer shrink-0"
+                      >
+                        RÉINITIALISER
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onResetSample();
+                            setIsConfirmingReset(false);
+                            setBackupMessage({
+                              type: 'info',
+                              text: 'Collection réinitialisée avec les jeux rétro d\'exemple.',
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold font-pixel transition cursor-pointer shadow-xs"
+                        >
+                          CONFIRMER
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsConfirmingReset(false)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-retro hover:bg-slate-700 transition cursor-pointer"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Notice */}
+              <div className="p-3 rounded-xl bg-[#0e1422] border border-slate-800 flex items-start gap-2.5 text-xs text-slate-400">
+                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  <strong className="text-slate-200">Conseil d'archivage :</strong> Sauvegardez régulièrement votre collection en JSON avant de réaliser de gros ajouts ou avant de changer de smartphone pour ne jamais perdre vos cotes personnalisées et historiques.
                 </p>
               </div>
             </div>

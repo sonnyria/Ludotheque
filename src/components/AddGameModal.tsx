@@ -79,6 +79,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
   // Lookup state
   const [isSearching, setIsSearching] = useState(false);
+  const [isSearchingCover, setIsSearchingCover] = useState(false);
+  const [coverAlternatives, setCoverAlternatives] = useState<any[]>([]);
   const [lookupMessage, setLookupMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
   const [titleSuggestions, setTitleSuggestions] = useState<any[]>([]);
 
@@ -124,6 +126,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         .then((r) => r.json())
         .then((d) => {
           if (d.coverUrl) setCoverUrl(getSafeCoverUrl(d.coverUrl));
+          if (d.covers && d.covers.length > 0) setCoverAlternatives(d.covers);
         })
         .catch(() => {});
     }
@@ -140,6 +143,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     setDeveloper('');
     setGenre('');
     setCoverUrl('');
+    setCoverAlternatives([]);
+    setIsSearchingCover(false);
     setCondition('complet');
     setStatus('completed');
     setRating(5);
@@ -436,7 +441,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
 
       setLookupMessage({
         type: 'warning',
-        text: 'Recherche d\'enrichissement temporairement indisponible. Vous pouvez saisir les détails manuellement.',
+        text: 'Informations en ligne non trouvées automatiquement. Vous pouvez compléter la fiche manuellement.',
       });
     } finally {
       setIsSearching(false);
@@ -445,14 +450,14 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
 
   const handleFetchCover = async () => {
     if (!title.trim()) return;
-    setIsSearching(true);
+    setIsSearchingCover(true);
     setLookupMessage(null);
 
     const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
 
       const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(title)}&console=${encodeURIComponent(targetConsole)}`, {
         signal: controller.signal,
@@ -462,23 +467,26 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
       const data = await res.json();
       if (data.coverUrl) {
         setCoverUrl(getSafeCoverUrl(data.coverUrl));
+        if (data.covers && Array.isArray(data.covers) && data.covers.length > 0) {
+          setCoverAlternatives(data.covers);
+        }
         setLookupMessage({
           type: 'success',
-          text: 'Jaquette officielle trouvée et chargée avec succès !',
+          text: 'Jaquette trouvée ! Vous pouvez aussi sélectionner une autre proposition ci-dessous.',
         });
       } else {
         setLookupMessage({
           type: 'warning',
-          text: 'Aucune jaquette officielle trouvée automatiquement pour ce titre. Vous pouvez coller le lien d\'une image.',
+          text: 'Aucune jaquette trouvée automatiquement. Utilisez le bouton Google Images ci-dessous pour choisir une illustration.',
         });
       }
     } catch {
       setLookupMessage({
         type: 'warning',
-        text: 'Recherche de jaquette non disponible pour le moment. Vous pouvez coller manuellement l\'URL d\'une image.',
+        text: 'La recherche automatique a pris trop de temps. Utilisez le bouton Google Images ci-dessous pour coller une image.',
       });
     } finally {
-      setIsSearching(false);
+      setIsSearchingCover(false);
     }
   };
 
@@ -689,6 +697,32 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
             )}
             <div className="flex-1 space-y-1.5">
               <span>{lookupMessage.text}</span>
+              {lookupMessage.type === 'warning' && (title || barcode) && (
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  {barcode && (
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(barcode)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Google Code-barres ({barcode})</span>
+                    </a>
+                  )}
+                  {title && (
+                    <a
+                      href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${title} ${finalConsole !== 'Autre' ? finalConsole : ''} jaquette box art`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Google Images ({title})</span>
+                    </a>
+                  )}
+                </div>
+              )}
               {lookupMessage.type !== 'success' && !hasStoredGeminiApiKey() && onOpenSettings && (
                 <div className="pt-1">
                   <button
@@ -1294,15 +1328,33 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                   <label htmlFor="game-cover" className="text-xs font-bold font-pixel text-slate-300">
                     JAQUETTE DU JEU (BOX ART)
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleFetchCover}
-                    disabled={!title.trim() || isSearching}
-                    className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    Rechercher jaquette
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    {title.trim() && (
+                      <a
+                        href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${title} ${finalConsole !== 'Autre' ? finalConsole : ''} jaquette box art`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-sky-400 hover:text-sky-300 font-pixel flex items-center gap-1 cursor-pointer transition hover:underline"
+                        title="Rechercher des images sur Google dans un nouvel onglet"
+                      >
+                        <ExternalLink className="w-3 h-3 text-sky-400" />
+                        Google Images
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleFetchCover}
+                      disabled={!title.trim() || isSearchingCover}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    >
+                      {isSearchingCover ? (
+                        <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      )}
+                      {isSearchingCover ? 'Recherche...' : 'Rechercher jaquette'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex gap-3 items-start">
@@ -1331,6 +1383,46 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     </div>
                   )}
                 </div>
+
+                {/* Proposals / alternatives found */}
+                {coverAlternatives.length > 1 && (
+                  <div className="mt-2.5 p-2 bg-slate-900/80 rounded-xl border border-slate-800">
+                    <div className="text-[10px] text-slate-400 font-pixel mb-1.5 flex items-center justify-between">
+                      <span className="text-amber-400/90 font-bold">Autres jaquettes trouvées sur le web (cliquez pour choisir) :</span>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                      {coverAlternatives.slice(0, 8).map((alt, idx) => {
+                        const isSelected = coverUrl === alt.url || coverUrl === alt.rawUrl;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setCoverUrl(alt.url || alt.rawUrl);
+                            }}
+                            className={`w-12 h-16 rounded-lg border overflow-hidden shrink-0 transition cursor-pointer hover:scale-105 bg-slate-950 flex items-center justify-center p-0.5 ${
+                              isSelected ? 'border-amber-400 ring-2 ring-amber-400/80 shadow-md' : 'border-slate-700 opacity-60 hover:opacity-100 hover:border-slate-500'
+                            }`}
+                            title={alt.title || 'Choisir cette jaquette'}
+                          >
+                            <img
+                              src={alt.thumb || alt.url}
+                              alt=""
+                              className="w-full h-full object-contain"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (alt.url && target.src !== alt.url) {
+                                  target.src = alt.url;
+                                }
+                              }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action buttons */}
