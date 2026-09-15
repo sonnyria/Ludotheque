@@ -300,6 +300,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     if (!file) return;
 
     try {
+      await stopCamera();
       if (!html5QrCodeRef.current) {
         html5QrCodeRef.current = new Html5Qrcode(scannerContainerId);
       }
@@ -309,7 +310,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       if (clean) {
         playBeep();
         triggerHaptic();
-        stopCamera();
+        await stopCamera();
         onBarcodeDetected(clean);
       }
     } catch {

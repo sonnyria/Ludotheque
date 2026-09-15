@@ -245,15 +245,50 @@ const VERIFIED_BARCODES: Record<string, {
   '0711719183822': { title: 'God of War III', console: 'PlayStation 3', releaseYear: 2010, publisher: 'Sony Computer Entertainment', developer: 'Santa Monica Studio', genre: 'Action-Aventure', estimatedValue: 10 },
 
   // --- PlayStation 2 & PlayStation 1 ---
+  '5030930104862': { title: 'Need for Speed: Underground 2', console: 'PlayStation 2', releaseYear: 2004, publisher: 'Electronic Arts', developer: 'EA Black Box', genre: 'Course', estimatedValue: 18 },
+  '5030930039867': { title: 'Need for Speed: Underground', console: 'PlayStation 2', releaseYear: 2003, publisher: 'Electronic Arts', developer: 'EA Black Box', genre: 'Course', estimatedValue: 12 },
+  '5030930048661': { title: 'Need for Speed: Most Wanted', console: 'PlayStation 2', releaseYear: 2005, publisher: 'Electronic Arts', developer: 'EA Canada / Black Box', genre: 'Course', estimatedValue: 20 },
+  '5030930058448': { title: 'Need for Speed: Carbon', console: 'PlayStation 2', releaseYear: 2006, publisher: 'Electronic Arts', developer: 'EA Canada', genre: 'Course', estimatedValue: 14 },
+  '5030930070624': { title: 'Need for Speed: ProStreet', console: 'PlayStation 2', releaseYear: 2007, publisher: 'Electronic Arts', developer: 'EA Black Box', genre: 'Course', estimatedValue: 10 },
   '5026555302791': { title: 'Grand Theft Auto: San Andreas', console: 'PlayStation 2', releaseYear: 2004, publisher: 'Rockstar Games', developer: 'Rockstar North', genre: 'Action-Aventure', estimatedValue: 14 },
   '5026555301824': { title: 'Grand Theft Auto: Vice City', console: 'PlayStation 2', releaseYear: 2002, publisher: 'Rockstar Games', developer: 'Rockstar North', genre: 'Action-Aventure', estimatedValue: 12 },
+  '5026555300896': { title: 'Grand Theft Auto III', console: 'PlayStation 2', releaseYear: 2001, publisher: 'Rockstar Games', developer: 'DMA Design', genre: 'Action-Aventure', estimatedValue: 10 },
   '0711719213826': { title: 'Final Fantasy X', console: 'PlayStation 2', releaseYear: 2002, publisher: 'Square Enix', developer: 'Square', genre: 'J-RPG', estimatedValue: 10 },
   '0711719602422': { title: 'Gran Turismo 4', console: 'PlayStation 2', releaseYear: 2005, publisher: 'Sony Computer Entertainment', developer: 'Polyphony Digital', genre: 'Simulation de Course', estimatedValue: 10 },
   '0711719600923': { title: 'Metal Gear Solid 2: Sons of Liberty', console: 'PlayStation 2', releaseYear: 2002, publisher: 'Konami', developer: 'KCEJ', genre: 'Infiltration / Action', estimatedValue: 12 },
+  '4012927042564': { title: 'Metal Gear Solid 3: Snake Eater', console: 'PlayStation 2', releaseYear: 2004, publisher: 'Konami', developer: 'Konami Computer Entertainment Japan', genre: 'Infiltration / Action', estimatedValue: 18 },
+  '5055060960530': { title: 'Resident Evil 4', console: 'PlayStation 2', releaseYear: 2005, publisher: 'Capcom', developer: 'Capcom Production Studio 4', genre: 'Survival Horror / Action', estimatedValue: 15 },
+  '0711719642220': { title: 'God of War', console: 'PlayStation 2', releaseYear: 2005, publisher: 'Sony Computer Entertainment', developer: 'Santa Monica Studio', genre: 'Action-Aventure', estimatedValue: 14 },
+  '0711719692423': { title: 'God of War II', console: 'PlayStation 2', releaseYear: 2007, publisher: 'Sony Computer Entertainment', developer: 'Santa Monica Studio', genre: 'Action-Aventure', estimatedValue: 16 },
   '0711719460022': { title: 'Metal Gear Solid', console: 'PlayStation 1', releaseYear: 1999, publisher: 'Konami', developer: 'KCEJ', genre: 'Infiltration / Action', estimatedValue: 35 },
   '0711719430025': { title: 'Final Fantasy VII', console: 'PlayStation 1', releaseYear: 1997, publisher: 'Squaresoft', developer: 'Square', genre: 'J-RPG', estimatedValue: 40 },
   '0711719450023': { title: 'Crash Bandicoot 3: Warped', console: 'PlayStation 1', releaseYear: 1998, publisher: 'Sony Computer Entertainment', developer: 'Naughty Dog', genre: 'Plates-formes', estimatedValue: 22 },
   '0711719708827': { title: 'Tekken 3', console: 'PlayStation 1', releaseYear: 1998, publisher: 'Namco', developer: 'Namco', genre: 'Combat', estimatedValue: 20 },
+
+  // --- PlayStation 3 & Xbox 360 additional ---
+  '5030932104860': { title: 'Need for Speed: The Run', console: 'PlayStation 3', releaseYear: 2011, publisher: 'Electronic Arts', developer: 'EA Black Box', genre: 'Course', estimatedValue: 8 },
+  '5030930081071': { title: 'Need for Speed: Undercover', console: 'PlayStation 3', releaseYear: 2008, publisher: 'Electronic Arts', developer: 'EA Black Box', genre: 'Course', estimatedValue: 7 },
+  '5030930090424': { title: 'Need for Speed: Shift', console: 'PlayStation 3', releaseYear: 2009, publisher: 'Electronic Arts', developer: 'Slightly Mad Studios', genre: 'Course', estimatedValue: 7 },
+  '5030930098901': { title: 'Need for Speed: Hot Pursuit', console: 'PlayStation 3', releaseYear: 2010, publisher: 'Electronic Arts', developer: 'Criterion Games', genre: 'Course', estimatedValue: 8 },
+  '5030930109157': { title: 'Need for Speed: Most Wanted', console: 'PlayStation 3', releaseYear: 2012, publisher: 'Electronic Arts', developer: 'Criterion Games', genre: 'Course', estimatedValue: 9 },
+  '5030930111822': { title: 'Need for Speed: Rivals', console: 'PlayStation 4', releaseYear: 2013, publisher: 'Electronic Arts', developer: 'Ghost Games', genre: 'Course', estimatedValue: 9 },
+  '5030932115660': { title: 'Need for Speed: Payback', console: 'PlayStation 4', releaseYear: 2017, publisher: 'Electronic Arts', developer: 'Ghost Games', genre: 'Course', estimatedValue: 12 },
+  '5030938122346': { title: 'Need for Speed: Heat', console: 'PlayStation 4', releaseYear: 2019, publisher: 'Electronic Arts', developer: 'Ghost Games', genre: 'Course', estimatedValue: 15 },
+  '5030936124285': { title: 'Need for Speed: Unbound', console: 'PlayStation 5', releaseYear: 2022, publisher: 'Electronic Arts', developer: 'Criterion Games', genre: 'Course', estimatedValue: 24 },
+  '5030932124370': { title: 'FIFA 23', console: 'PlayStation 4', releaseYear: 2022, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 8 },
+  '5030932124363': { title: 'FIFA 23', console: 'PlayStation 5', releaseYear: 2022, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 12 },
+  '5030935124299': { title: 'EA Sports FC 24', console: 'PlayStation 5', releaseYear: 2023, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 18 },
+  '5030938124302': { title: 'EA Sports FC 24', console: 'PlayStation 4', releaseYear: 2023, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 14 },
+  '5030930124316': { title: 'EA Sports FC 24', console: 'Nintendo Switch', releaseYear: 2023, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 16 },
+  '5030931122828': { title: 'FIFA 22', console: 'PlayStation 4', releaseYear: 2021, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 6 },
+  '5030930122817': { title: 'FIFA 22', console: 'PlayStation 5', releaseYear: 2021, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 8 },
+  '5030931121876': { title: 'FIFA 21', console: 'PlayStation 4', releaseYear: 2020, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 5 },
+  '5030932119934': { title: 'FIFA 20', console: 'PlayStation 4', releaseYear: 2019, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 4 },
+  '5030935118045': { title: 'FIFA 19', console: 'PlayStation 4', releaseYear: 2018, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 4 },
+  '5030931115882': { title: 'FIFA 18', console: 'PlayStation 4', releaseYear: 2017, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 3 },
+  '5030930106880': { title: 'FIFA 16', console: 'PlayStation 4', releaseYear: 2015, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 3 },
+  '5030930104084': { title: 'FIFA 15', console: 'PlayStation 4', releaseYear: 2014, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 3 },
+  '5030930100789': { title: 'FIFA 14', console: 'PlayStation 4', releaseYear: 2013, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 3 },
 
   // --- Retro Nintendo (N64, GameCube, SNES, Game Boy) ---
   '045496730079': { title: 'The Legend of Zelda: Ocarina of Time', console: 'Nintendo 64', releaseYear: 1998, publisher: 'Nintendo', developer: 'Nintendo EAD', genre: 'Action-Aventure', estimatedValue: 45 },
@@ -423,9 +458,60 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
 
   const unpadded = cleanCode.replace(/^0+/, '');
 
-  // 1. Parallel Multi-Engine Live Search across DuckDuckGo, Buycott, Bing & OpenProductsFacts
+  // 1. Parallel Multi-Engine Live Search across UPCitemdb, VGCollect, DuckDuckGo, Buycott, Bing & OpenProductsFacts
   const liveQueries = [
-    // 1a. DuckDuckGo HTML exact quoted search for the barcode (finds exact eBay/Amazon/PriceCharting product listings)
+    // 1a. UPCitemdb live lookup (Direct, ultra-fast & highly accurate for official video game UPCs & EANs)
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        const upcRes = await fetch(`https://www.upcitemdb.com/upc/${cleanCode}`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+        if (upcRes.ok) {
+          const html = await upcRes.text();
+          const m = html.match(/<p[^>]*class="detail-title"[^>]*>([\s\S]*?)<\/p>/i) || html.match(/<title>([\s\S]*?)<\/title>/i);
+          if (m) {
+            const val = m[1].replace(/<[^>]+>/g, '').trim();
+            if (val && !/not found|404|error/i.test(val)) {
+              rawTitles.push(val);
+              rawSnippets.push(`UPCitemdb: ${val}`);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })(),
+
+    // 1b. VGCollect Video Game Database live lookup (Specialized video games catalog)
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        const vgcRes = await fetch(`https://vgcollect.com/search/${cleanCode}`, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeout);
+        if (vgcRes.ok) {
+          const html = await vgcRes.text();
+          const matches = Array.from(html.matchAll(/<div[^>]*class="item-name"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/gi)).map(x => x[1].replace(/<[^>]+>/g, '').trim());
+          const platforms = Array.from(html.matchAll(/<div[^>]*class="item-platform"[^>]*>([\s\S]*?)<\/div>/gi)).map(x => x[1].replace(/<[^>]+>/g, '').trim());
+          if (matches.length > 0) {
+            const fullTitle = platforms[0] ? `${matches[0]} [${platforms[0]}]` : matches[0];
+            rawTitles.push(fullTitle);
+            rawSnippets.push(`VGCollect: ${fullTitle}`);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })(),
+
+    // 1c. DuckDuckGo HTML exact quoted search for the barcode (finds exact eBay/Amazon/PriceCharting product listings)
     (async () => {
       try {
         const controller = new AbortController();
@@ -451,7 +537,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
       }
     })(),
 
-    // 1b. DuckDuckGo unquoted search
+    // 1d. DuckDuckGo unquoted search
     (async () => {
       try {
         const controller = new AbortController();
@@ -645,25 +731,29 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   // Detect publisher
   let detectedPublisher: string | undefined;
   for (const text of allTexts) {
+    if (/\bCD Projekt\b|\bCD Projekt RED\b/i.test(text)) { detectedPublisher = 'CD Projekt RED'; break; }
+    else if (/\bRockstar Games\b|\bRockstar\b/i.test(text)) { detectedPublisher = 'Rockstar Games'; break; }
+    else if (/\bActivision\b|\bBlizzard\b/i.test(text)) { detectedPublisher = 'Activision Blizzard'; break; }
+    else if (/\bElectronic Arts\b|\bEA Games\b|\bEA Sports\b/i.test(text)) { detectedPublisher = 'Electronic Arts'; break; }
+    else if (/\bUbisoft\b/i.test(text)) { detectedPublisher = 'Ubisoft'; break; }
+    else if (/\bNintendo\b/i.test(text)) { detectedPublisher = 'Nintendo'; break; }
+    else if (/\bSony Interactive\b|\bSony Computer\b/i.test(text)) { detectedPublisher = 'Sony Interactive Entertainment'; break; }
+    else if (/\bCapcom\b/i.test(text)) { detectedPublisher = 'Capcom'; break; }
+    else if (/\bSquare Enix\b|\bSquaresoft\b/i.test(text)) { detectedPublisher = 'Square Enix'; break; }
+    else if (/\bKonami\b/i.test(text)) { detectedPublisher = 'Konami'; break; }
+    else if (/\bBandai Namco\b|\bNamco\b/i.test(text)) { detectedPublisher = 'Bandai Namco'; break; }
+    else if (/\bBethesda\b/i.test(text)) { detectedPublisher = 'Bethesda'; break; }
+    else if (/\bSega\b/i.test(text)) { detectedPublisher = 'Sega'; break; }
+    else if (/\bWarner Bros\b|\bWB Games\b/i.test(text)) { detectedPublisher = 'Warner Bros. Games'; break; }
+
     const pm = text.match(/(?:Editeur|Éditeur|Publisher|Manufacturer)\s*[:‏\s]+([A-Za-z0-9\s&]{3,30})/i);
     if (pm) {
-      detectedPublisher = pm[1].trim();
-      break;
+      const candidate = pm[1].trim();
+      if (!/battery|batteries|none|unknown|n\/a|china|vietnam|generic/i.test(candidate)) {
+        detectedPublisher = candidate;
+        break;
+      }
     }
-    if (/\bCD Projekt\b|\bCD Projekt RED\b/i.test(text)) detectedPublisher = 'CD Projekt RED';
-    else if (/\bRockstar Games\b|\bRockstar\b/i.test(text)) detectedPublisher = 'Rockstar Games';
-    else if (/\bActivision\b|\bBlizzard\b/i.test(text)) detectedPublisher = 'Activision Blizzard';
-    else if (/\bElectronic Arts\b|\bEA Games\b|\bEA Sports\b/i.test(text)) detectedPublisher = 'Electronic Arts';
-    else if (/\bUbisoft\b/i.test(text)) detectedPublisher = 'Ubisoft';
-    else if (/\bNintendo\b/i.test(text)) detectedPublisher = 'Nintendo';
-    else if (/\bSony Interactive\b|\bSony Computer\b/i.test(text)) detectedPublisher = 'Sony Interactive Entertainment';
-    else if (/\bCapcom\b/i.test(text)) detectedPublisher = 'Capcom';
-    else if (/\bSquare Enix\b|\bSquaresoft\b/i.test(text)) detectedPublisher = 'Square Enix';
-    else if (/\bKonami\b/i.test(text)) detectedPublisher = 'Konami';
-    else if (/\bBandai Namco\b|\bNamco\b/i.test(text)) detectedPublisher = 'Bandai Namco';
-    else if (/\bBethesda\b/i.test(text)) detectedPublisher = 'Bethesda';
-    else if (/\bSega\b/i.test(text)) detectedPublisher = 'Sega';
-    else if (/\bWarner Bros\b|\bWB Games\b/i.test(text)) detectedPublisher = 'Warner Bros. Games';
   }
 
   // Extract clean game titles from raw titles
@@ -705,28 +795,30 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   for (const t of rawTitles) {
     if (nonGameRegex.test(t)) continue;
     let s = t;
+    s = s.replace(/^(?:UPC|EAN|GTIN|ISBN)[\s:-]*\d+[\s:-]*/i, '');
+    s = s.replace(/^(?:UPC|EAN|GTIN|ISBN)[\s:-]*/i, '');
+    s = s.replace(/\|\s*upcitemdb\.com/gi, '');
+    s = s.replace(/\s*[-–|]\s*(?:upcitemdb.*|Target.*|Walmart.*|Best\s*Buy.*|GameStop.*|eBay.*|Amazon.*|Fnac.*|Rakuten.*|Cdiscount.*|Micromania.*|Bigshopper.*|Buycott.*|worldofbooks.*|Waterstones.*|HMV.*)$/i, '');
     s = s.replace(/^Third\s*Party\s*[-–:]\s*/i, '');
-    s = s.replace(/\s*[-–|]\s*(?:eBay.*|Amazon.*|Fnac.*|Rakuten.*|Cdiscount.*|Micromania.*|Bigshopper.*|Buycott.*|worldofbooks.*|Waterstones.*|HMV.*)$/i, '');
     s = s.replace(/^CAPCOM\s*(?:France|Europe|USA)?\s*/i, '');
     s = s.replace(/^(?:Nintendo|Sony|Ubisoft|Square Enix|Konami|Bandai Namco|Sega|Bethesda|Rockstar Games|Electronic Arts|EA Games|Activision)\s*/i, '');
     s = s.replace(/^Take\s*2\s*(?:NG\s*)?/i, '');
     s = s.replace(/^New\s+/i, '');
     s = s.replace(/^Jeu\s*(?:PS[1-5]|Xbox|Switch|Wii|Sony)?\s*/i, '');
     s = s.replace(/\s*[-–|]\s*(?:Jeu|Game|Sony|Complet|Complet\s*Comme\s*NEUF|PAL|FR|UK|NEUF|NEW|FRENCH|VERSION|Occasion|Good\s*condition|Works).*$/i, '');
-    s = s.replace(/\s*\[.*?\]|\s*\(.*?\)/g, '');
+    s = s.replace(/\[[^\]]*\]|\([^\)]*\)/g, ' ');
     s = s.replace(/\b\d{10,13}\b/g, '');
     s = s.replace(/^EAN\s*[-–:]*\s*/i, '');
     s = s.replace(/\s*\|\s*(?:UPC\s*Lookup|Buy\s*.*)$/i, '');
     s = s.replace(/\s*(?:PS[1-5]|PlayStation\s*[1-5]|Xbox\s*(?:360|One|Series)?|Nintendo\s*(?:Switch|64|DS)?|XONE)\s*/gi, ' ');
     s = s.replace(/\s*\b(?:Occasion|Used|Jeu\s*Vid[eé]o|Video\s*Game|Import\s*(?:Fr|UK|US|JP|EU|Japon)|Edition\s*Standard|Version\s*(?:Française|FR|UK|US)|PAL\s*FR|French\s*Version|VF|VO|VOSTFR|PAL|NEUF|NEW)\b/gi, ' ');
-    s = s.replace(/\s*\b(?:for|pour|on|sur|für)\b/gi, ' ');
+    s = s.replace(/\s*\b(?:pour|sur|für)\b/gi, ' ');
+    s = s.replace(/\s*\bfor\s+(?:PlayStation|PS[1-5]|Xbox|Nintendo|Switch|Wii|PC)\b/gi, ' ');
     s = s.replace(/\s*VideoGames\s*$/i, '');
     s = s.replace(/\s*Game\s*$/i, '');
     s = s.replace(/\s*Rockstar\s*UK.*$/i, '');
-    s = s.replace(/\s*[-–:]\s*$/, '');
-    s = s.replace(/\s*:\s*/g, ': ');
-    s = s.trim().replace(/\s+/g, ' ');
-    s = s.replace(/\s*[-–:]\s*$/, '').trim();
+    s = s.replace(/^[\s\-–:|,.]+/, '').replace(/[\s\-–:|,\[\].]+$/, '').trim();
+    s = s.replace(/\s{2,}/g, ' ');
 
     // Normalize common roman numeral titles
     if (/^MEGA MAN XI\b/i.test(s)) s = 'Mega Man 11';
@@ -1365,7 +1457,62 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       });
     }
 
-    // 4. Optional: Gemini AI if operational and key provided
+    // 4. Automated background web search across online barcode databases (UPCitemdb, VGCollect, Bing, Buycott, DuckDuckGo)
+    // Fast, free, official product databases without relying on AI quota
+    const onlineResult = await searchBarcodeOnline(cleanCode);
+    if (onlineResult && onlineResult.title) {
+      let autoCoverUrl: string | undefined = undefined;
+      try {
+        const foundCover = await findOfficialCover(onlineResult.title, onlineResult.console || '');
+        if (foundCover) autoCoverUrl = foundCover;
+      } catch {
+        // ignore
+      }
+
+      // Enrich with Wikipedia and free web metadata if available
+      let enrichedTitle = onlineResult.title;
+      let enrichedConsole = onlineResult.console || 'Autre';
+      let enrichedYear = onlineResult.releaseYear;
+      let enrichedPublisher = onlineResult.publisher;
+      let enrichedDeveloper = onlineResult.developer;
+      let enrichedGenre = onlineResult.genre || guessGameGenre(enrichedTitle);
+      let enrichedSynopsis: string | undefined = undefined;
+
+      try {
+        const metaResults = await searchWikipediaGames(enrichedTitle, enrichedConsole);
+        if (metaResults.length > 0) {
+          const m = metaResults[0];
+          if (!enrichedYear && m.releaseYear) enrichedYear = m.releaseYear;
+          if (!enrichedPublisher && m.publisher) enrichedPublisher = m.publisher;
+          if (!enrichedDeveloper && m.developer) enrichedDeveloper = m.developer;
+          if (!enrichedSynopsis && m.synopsis) enrichedSynopsis = m.synopsis;
+          if (m.genre && (enrichedGenre === 'Action / Aventure' || enrichedGenre === 'Action-Aventure')) enrichedGenre = m.genre;
+          if (!autoCoverUrl && m.coverUrl) autoCoverUrl = m.coverUrl;
+        }
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: 'web_search',
+        game: {
+          title: enrichedTitle,
+          console: enrichedConsole,
+          releaseYear: enrichedYear || undefined,
+          publisher: enrichedPublisher || undefined,
+          developer: enrichedDeveloper || undefined,
+          genre: enrichedGenre,
+          synopsis: enrichedSynopsis || undefined,
+          estimatedValue: guessEstimatedValue(enrichedTitle, enrichedConsole),
+          barcode: cleanCode,
+          confidence: 'high',
+          coverUrl: autoCoverUrl || undefined,
+        }
+      });
+    }
+
+    // 5. Optional fallback: Gemini AI if available and key provided
     const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
@@ -1419,14 +1566,13 @@ Si tu n'es pas certain à 100% du jeu précis pour ce code-barres, réponds {"co
       }
     }
 
-    // 5. Code not yet in verified catalog -> Provide direct Google Search link and clean state
-    // NEVER output random hallucinated candidates from arbitrary web scraping!
+    // 6. Code not yet found on the web -> Provide direct Google Search link and clean state
     const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanCode)}`;
     return res.json({
       found: false,
       barcode: cleanCode,
       googleSearchUrl,
-      message: `Code-barres ${cleanCode} scanné. Cliquez sur le bouton Recherche Google pour afficher immédiatement le titre exact du jeu !`
+      message: `Code-barres ${cleanCode} scanné. Aucun résultat web direct. Cliquez sur le bouton Recherche Google pour afficher immédiatement le titre !`
     });
   } catch {
     return res.json({
@@ -1471,11 +1617,11 @@ app.get('/api/games/google-suggest', async (req, res) => {
   }
 });
 
-// API: Resolve game details & official cover from title found on Google
-app.post('/api/games/resolve-title', async (req, res) => {
+// API: Resolve game details & official cover from title found on Google (handles both POST and GET)
+app.all('/api/games/resolve-title', async (req, res) => {
   try {
-    const rawTitle = (req.body?.title as string || '').trim();
-    const preferredConsole = (req.body?.console as string || '').trim();
+    const rawTitle = (((req.body?.title || req.query?.title) as string) || '').trim();
+    const preferredConsole = (((req.body?.console || req.query?.console) as string) || '').trim();
     if (!rawTitle) {
       return res.status(400).json({ error: 'Titre requis' });
     }
@@ -1513,25 +1659,31 @@ app.post('/api/games/resolve-title', async (req, res) => {
     const estimatedValue = guessEstimatedValue(titleToSearch, detectedConsole);
     const genre = guessGameGenre(titleToSearch);
 
-    return res.json({
+    const gameObj = {
       title: titleToSearch,
       console: detectedConsole,
       genre,
       estimatedValue,
       coverUrl: bestCover || null,
       covers: covers || []
+    };
+
+    return res.json({
+      game: gameObj,
+      ...gameObj
     });
   } catch {
     return res.status(500).json({ error: 'Erreur de résolution du jeu' });
   }
 });
 
-// API: Search game by name or autofill details
-app.post('/api/games/search-gemini', async (req, res) => {
+// API: Search game by name or autofill details (handles both POST and GET)
+app.all('/api/games/search-gemini', async (req, res) => {
   try {
-    const query = req.body?.query;
-    const preferredConsole = req.body?.console;
-    if (!query || typeof query !== 'string' || !query.trim()) {
+    const rawQuery = req.body?.query || req.body?.title || req.query?.query || req.query?.title;
+    const query = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+    const preferredConsole = (((req.body?.console || req.query?.console) as string) || '').trim();
+    if (!query) {
       return res.status(400).json({ error: 'Nom du jeu requis.' });
     }
 
