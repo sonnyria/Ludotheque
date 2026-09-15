@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings, Loader2, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings, Loader2, ExternalLink, Globe } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
 import { BarcodeScanner } from './BarcodeScanner';
@@ -83,8 +83,72 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const [coverAlternatives, setCoverAlternatives] = useState<any[]>([]);
   const [lookupMessage, setLookupMessage] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null);
   const [titleSuggestions, setTitleSuggestions] = useState<any[]>([]);
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
+  const lastSelectedTitleRef = useRef<string | null>(null);
 
-  if (!isOpen) return null;
+  const fetchSuggestions = async (searchQuery: string) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (q.length < 2) {
+      setTitleSuggestions([]);
+      return;
+    }
+    const localMatches = (existingGames || [])
+      .filter((g) => g.title.toLowerCase().includes(q))
+      .slice(0, 4)
+      .map((g) => ({
+        title: g.title,
+        console: g.console,
+        coverUrl: g.coverUrl,
+        genre: g.genre,
+        releaseYear: g.releaseYear,
+        publisher: g.publisher,
+        developer: g.developer,
+        isLocal: true,
+      }));
+
+    try {
+      const res = await fetch(`/api/games/google-suggest?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const googleItems = (data.suggestions || [])
+          .filter((s: string) => !localMatches.some((lm) => lm.title.toLowerCase() === s.toLowerCase()))
+          .slice(0, 5)
+          .map((s: string) => ({
+            title: s,
+            console: consoleName,
+            isGoogle: true,
+          }));
+        setTitleSuggestions([...localMatches, ...googleItems]);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    setTitleSuggestions(localMatches);
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setTitleSuggestions([]);
+      setShowTitleSuggestions(false);
+      lastSelectedTitleRef.current = null;
+      return;
+    }
+    if (!title || title.trim().length < 2) {
+      setTitleSuggestions([]);
+      return;
+    }
+    // Si le titre actuel est celui qui vient d'être sélectionné, ne pas réafficher les suggestions
+    if (lastSelectedTitleRef.current && lastSelectedTitleRef.current.toLowerCase().trim() === title.toLowerCase().trim()) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      fetchSuggestions(title);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, title, consoleName, existingGames]);
 
   const applyGameDetails = (g: {
     title: string;
@@ -98,7 +162,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     coverUrl?: string;
     barcode?: string;
   }) => {
-    if (g.title) setTitle(g.title);
+    setShowTitleSuggestions(false);
+    setTitleSuggestions([]);
+    if (g.title) {
+      lastSelectedTitleRef.current = g.title;
+      setTitle(g.title);
+    }
     if (g.console) {
       if (CONSOLE_LIST.includes(g.console as any)) {
         setConsoleName(g.console);
@@ -130,11 +199,47 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         })
         .catch(() => {});
     }
+  };
+
+  const handleSelectSuggestion = async (sug: any) => {
+    // Fermer immédiatement les suggestions et retenir le titre choisi
+    setShowTitleSuggestions(false);
     setTitleSuggestions([]);
+    lastSelectedTitleRef.current = sug.title;
+
+    if (sug.isGoogle) {
+      setIsSearching(true);
+      setTitle(sug.title);
+      try {
+        const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
+        const res = await fetch(`/api/games/resolve-title?title=${encodeURIComponent(sug.title)}&console=${encodeURIComponent(targetConsole)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.game) {
+            applyGameDetails({ ...data.game, barcode: barcode || undefined });
+            setLookupMessage({
+              type: 'success',
+              text: `Fiche complétée pour "${data.game.title}" !`,
+            });
+            return;
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+        setIsSearching(false);
+      }
+      applyGameDetails(sug);
+    } else {
+      applyGameDetails(sug);
+    }
   };
 
   const resetForm = () => {
     setTitle('');
+    setShowTitleSuggestions(false);
+    setTitleSuggestions([]);
+    lastSelectedTitleRef.current = null;
     setConsoleName('Nintendo Switch');
     setCustomConsole('');
     setBarcode('');
@@ -594,6 +699,8 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
     handleClose();
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-hidden">
       <div
@@ -897,32 +1004,31 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     required
                     placeholder="Ex: Need for Speed The Run, Super Mario Odyssey..."
                     value={title}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setTitle(val);
-                      if (lookupMessage?.type === 'warning') setLookupMessage(null);
-                      if (val.trim().length >= 2) {
-                        const q = val.toLowerCase().trim();
-                        const matched = existingGames
-                          .filter((g) => g.title.toLowerCase().includes(q))
-                          .slice(0, 5)
-                          .map((g) => ({
-                            title: g.title,
-                            console: g.console,
-                            coverUrl: g.coverUrl,
-                            genre: g.genre,
-                            releaseYear: g.releaseYear,
-                            publisher: g.publisher,
-                            developer: g.developer,
-                          }));
-                        setTitleSuggestions(matched);
-                      } else {
-                        setTitleSuggestions([]);
+                    onFocus={() => {
+                      lastSelectedTitleRef.current = null;
+                      setShowTitleSuggestions(true);
+                      if (title.trim().length >= 2) {
+                        fetchSuggestions(title);
                       }
                     }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowTitleSuggestions(false);
+                      }, 200);
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      lastSelectedTitleRef.current = null;
+                      setTitle(val);
+                      setShowTitleSuggestions(true);
+                      if (lookupMessage?.type === 'warning') setLookupMessage(null);
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'Escape') {
+                        setShowTitleSuggestions(false);
+                      } else if (e.key === 'Enter') {
                         e.preventDefault();
+                        setShowTitleSuggestions(false);
                         handleAiEnrich();
                       }
                     }}
@@ -934,6 +1040,8 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                       onClick={() => {
                         setTitle('');
                         setTitleSuggestions([]);
+                        setShowTitleSuggestions(false);
+                        lastSelectedTitleRef.current = null;
                       }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs cursor-pointer p-1"
                     >
@@ -943,33 +1051,63 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                 </div>
 
                 {/* Instant Title Suggestions Dropdown */}
-                {titleSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-[#0d121f] border border-amber-500/50 rounded-xl shadow-2xl overflow-hidden p-1.5 space-y-1">
-                    <div className="text-[10px] font-pixel text-amber-400/80 px-2 py-1 flex items-center gap-1.5 border-b border-slate-800">
-                      <Sparkles className="w-3 h-3 text-amber-400" />
-                      <span>SUGGESTIONS AUTOMATIQUES (CLIQUEZ POUR REMPLIR) :</span>
+                {showTitleSuggestions && titleSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-[#0d121f] border border-amber-500/50 rounded-xl shadow-2xl overflow-hidden p-1.5 space-y-1 max-h-64 overflow-y-auto">
+                    <div className="text-[10px] font-pixel text-amber-400/80 px-2 py-1 flex items-center justify-between border-b border-slate-800 sticky top-0 bg-[#0d121f] z-10">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3 text-amber-400" />
+                        <span>SUGGESTIONS INSTANTANÉES (CLIQUEZ POUR REMPLIR) :</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowTitleSuggestions(false)}
+                        className="text-[10px] text-slate-400 hover:text-slate-200 px-1.5 py-0.5 rounded hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        ✕ Fermer
+                      </button>
                     </div>
                     {titleSuggestions.map((sug, idx) => (
                       <button
                         key={`${sug.title}-${sug.console}-${idx}`}
                         type="button"
-                        onClick={() => applyGameDetails(sug)}
+                        onMouseDown={(e) => {
+                          // Empêche la perte de focus prématurée avant que onClick s'exécute
+                          e.preventDefault();
+                        }}
+                        onClick={() => handleSelectSuggestion(sug)}
                         className="w-full text-left p-2 rounded-lg hover:bg-amber-400/10 hover:border-amber-400/40 border border-transparent transition flex items-center justify-between gap-2 cursor-pointer group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          {sug.coverUrl && (
+                          {sug.coverUrl ? (
                             <img
                               src={getSafeCoverUrl(sug.coverUrl)}
                               alt=""
                               className="w-7 h-9 object-contain bg-black/40 rounded border border-slate-700/60 shrink-0"
                               referrerPolicy="no-referrer"
                             />
+                          ) : (
+                            <div className="w-7 h-9 rounded bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                              {sug.isGoogle ? <Globe className="w-3.5 h-3.5 text-blue-400" /> : <Boxes className="w-3.5 h-3.5 text-amber-400" />}
+                            </div>
                           )}
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-200 group-hover:text-amber-300 truncate">
-                              {sug.title}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-bold text-slate-200 group-hover:text-amber-300 truncate">
+                                {sug.title}
+                              </p>
+                              {sug.isGoogle && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-0.5 shrink-0">
+                                  <Globe className="w-2.5 h-2.5" />
+                                  Google
+                                </span>
+                              )}
+                              {sug.isLocal && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">
+                                  En stock
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-400 truncate">
                               {sug.console} {sug.releaseYear ? `• ${sug.releaseYear}` : ''} {sug.genre ? `• ${sug.genre}` : ''}
                             </p>
                           </div>
