@@ -6,6 +6,7 @@ import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
 import { getGeminiAuthHeaders, hasStoredGeminiApiKey, getStoredGeminiApiKey, callDirectGeminiJson } from '../utils/geminiApiKey';
+import { lookupBarcodeInCatalog, searchGamesInCatalog } from '../data/barcodeCatalog';
 
 export function getSafeCoverUrl(url?: string): string {
   if (!url) return '';
@@ -85,16 +86,38 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const [titleSuggestions, setTitleSuggestions] = useState<any[]>([]);
   const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
   const lastSelectedTitleRef = useRef<string | null>(null);
+  const suggestionsBoxRef = useRef<HTMLDivElement>(null);
+
+  // Close suggestions only when clicking/tapping completely outside the input and suggestions container
+  useEffect(() => {
+    const handleOutsideInteraction = (e: MouseEvent | TouchEvent) => {
+      if (
+        suggestionsBoxRef.current &&
+        !suggestionsBoxRef.current.contains(e.target as Node)
+      ) {
+        setShowTitleSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideInteraction);
+    document.addEventListener('touchstart', handleOutsideInteraction, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideInteraction);
+      document.removeEventListener('touchstart', handleOutsideInteraction);
+    };
+  }, []);
 
   const fetchSuggestions = async (searchQuery: string) => {
     const q = searchQuery.toLowerCase().trim();
     if (q.length < 2) {
       setTitleSuggestions([]);
+      setShowTitleSuggestions(false);
       return;
     }
+
+    // 1. Local games in current collection
     const localMatches = (existingGames || [])
       .filter((g) => g.title.toLowerCase().includes(q))
-      .slice(0, 4)
+      .slice(0, 3)
       .map((g) => ({
         title: g.title,
         console: g.console,
@@ -103,28 +126,52 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         releaseYear: g.releaseYear,
         publisher: g.publisher,
         developer: g.developer,
+        barcode: g.barcode,
         isLocal: true,
       }));
 
+    // 2. Verified games database (instant offline lookup with covers, consoles, publishers)
+    const catalogMatches = searchGamesInCatalog(q, 6)
+      .filter((cg) => !localMatches.some((lm) => lm.title.toLowerCase() === cg.title.toLowerCase()))
+      .map((cg) => ({
+        ...cg,
+        isCatalog: true,
+      }));
+
+    // Immediate display of local and catalog results (0ms latency!)
+    const immediateMatches = [...localMatches, ...catalogMatches];
+    if (immediateMatches.length > 0) {
+      setTitleSuggestions(immediateMatches);
+      setShowTitleSuggestions(true);
+    }
+
+    // 3. Live Google query suggestions in background
     try {
       const res = await fetch(`/api/games/google-suggest?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
         const googleItems = (data.suggestions || [])
-          .filter((s: string) => !localMatches.some((lm) => lm.title.toLowerCase() === s.toLowerCase()))
+          .filter((s: string) => !immediateMatches.some((im) => im.title.toLowerCase() === s.toLowerCase()))
           .slice(0, 5)
           .map((s: string) => ({
             title: s,
-            console: consoleName,
+            console: consoleName !== 'Autre' ? consoleName : undefined,
             isGoogle: true,
           }));
-        setTitleSuggestions([...localMatches, ...googleItems]);
+        const fullList = [...immediateMatches, ...googleItems];
+        if (fullList.length > 0) {
+          setTitleSuggestions(fullList);
+          setShowTitleSuggestions(true);
+        }
         return;
       }
     } catch {
       // ignore
     }
-    setTitleSuggestions(localMatches);
+    if (immediateMatches.length > 0) {
+      setTitleSuggestions(immediateMatches);
+      setShowTitleSuggestions(true);
+    }
   };
 
   useEffect(() => {
@@ -136,6 +183,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     }
     if (!title || title.trim().length < 2) {
       setTitleSuggestions([]);
+      setShowTitleSuggestions(false);
       return;
     }
     // Si le titre actuel est celui qui vient d'être sélectionné, ne pas réafficher les suggestions
@@ -145,7 +193,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
     const timer = setTimeout(() => {
       fetchSuggestions(title);
-    }, 250);
+    }, 180);
 
     return () => clearTimeout(timer);
   }, [isOpen, title, consoleName, existingGames]);
@@ -327,7 +375,24 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       return;
     }
 
-    // 2. Pure live web search for this barcode
+    // 2. Fast check in verified physical games catalog (0ms latency, official covers & consoles)
+    const catalogMatch = lookupBarcodeInCatalog(cleanCode);
+    if (catalogMatch) {
+      applyGameDetails({ ...catalogMatch, barcode: cleanCode });
+      const freshCote = (typeof catalogMatch.estimatedValue === 'number' && catalogMatch.estimatedValue > 0)
+        ? catalogMatch.estimatedValue
+        : estimateMarketValue(catalogMatch.title, catalogMatch.console, condition);
+      setEstimatedValue(freshCote);
+      setLookupMessage({
+        type: 'success',
+        text: `Jeu authentifié avec succès : "${catalogMatch.title}" (${catalogMatch.console}) • Cote estimée : ${freshCote} €`,
+      });
+      setIsSearching(false);
+      setActiveTab('manual');
+      return;
+    }
+
+    // 3. Live search across online databases & web
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 18000);
@@ -982,10 +1047,19 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
               )}
 
               {/* Title & AI Autofill */}
-              <div className="font-retro relative">
+              <div ref={suggestionsBoxRef} className="font-retro relative">
                 <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="game-title" className="text-xs font-bold font-pixel text-slate-300">
-                    NOM DU JEU *
+                  <label htmlFor="game-title" className="text-xs font-bold font-pixel text-slate-300 flex items-center gap-1.5">
+                    <span>NOM DU JEU *</span>
+                    {titleSuggestions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTitleSuggestions(!showTitleSuggestions)}
+                        className="text-[10px] text-amber-400 hover:text-amber-300 font-semibold px-2 py-0.5 rounded-md bg-amber-400/10 border border-amber-400/30 cursor-pointer"
+                      >
+                        {showTitleSuggestions ? 'Masquer suggestions' : `💡 ${titleSuggestions.length} suggestions`}
+                      </button>
+                    )}
                   </label>
                   <button
                     type="button"
@@ -997,12 +1071,13 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     Compléter avec l'IA
                   </button>
                 </div>
+
                 <div className="relative">
                   <input
                     id="game-title"
                     type="text"
                     required
-                    placeholder="Ex: Need for Speed The Run, Super Mario Odyssey..."
+                    placeholder="Tapez un titre (ex: Mario, Spider-Man, FIFA, Assassin...)"
                     value={title}
                     onFocus={() => {
                       lastSelectedTitleRef.current = null;
@@ -1010,11 +1085,6 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                       if (title.trim().length >= 2) {
                         fetchSuggestions(title);
                       }
-                    }}
-                    onBlur={() => {
-                      setTimeout(() => {
-                        setShowTitleSuggestions(false);
-                      }, 200);
                     }}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -1050,55 +1120,87 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                   )}
                 </div>
 
-                {/* Instant Title Suggestions Dropdown */}
+                {/* 1-Tap Quick Suggestion Chips (Visible directly above/below input on mobile) */}
+                {titleSuggestions.length > 0 && (
+                  <div className="mt-1.5 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                    <span className="text-[10px] font-pixel text-amber-400/90 shrink-0 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      1-CLIC :
+                    </span>
+                    {titleSuggestions.slice(0, 5).map((sug, idx) => (
+                      <button
+                        key={`quick-chip-${sug.title}-${idx}`}
+                        type="button"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          handleSelectSuggestion(sug);
+                        }}
+                        onClick={() => handleSelectSuggestion(sug)}
+                        className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 active:bg-amber-400/40 text-amber-200 border border-amber-400/30 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                      >
+                        <span className="truncate max-w-[140px] sm:max-w-[200px]">{sug.title}</span>
+                        {sug.console && sug.console !== 'Autre' && (
+                          <span className="text-[9px] text-amber-300/80 font-normal">({sug.console})</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Full Suggestions Dropdown (Mobile-optimized with touch events & safe outside tap) */}
                 {showTitleSuggestions && titleSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-[#0d121f] border border-amber-500/50 rounded-xl shadow-2xl overflow-hidden p-1.5 space-y-1 max-h-64 overflow-y-auto">
-                    <div className="text-[10px] font-pixel text-amber-400/80 px-2 py-1 flex items-center justify-between border-b border-slate-800 sticky top-0 bg-[#0d121f] z-10">
+                  <div className="mt-2 z-40 bg-[#0d121f] border-2 border-amber-500/60 rounded-xl shadow-2xl overflow-hidden p-1.5 space-y-1 max-h-72 overflow-y-auto">
+                    <div className="text-[10px] font-pixel text-amber-400 px-2 py-1.5 flex items-center justify-between border-b border-slate-800 sticky top-0 bg-[#0d121f] z-10">
                       <span className="flex items-center gap-1.5">
-                        <Sparkles className="w-3 h-3 text-amber-400" />
-                        <span>SUGGESTIONS INSTANTANÉES (CLIQUEZ POUR REMPLIR) :</span>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                        <span>SUGGESTIONS DISPONIBLES ({titleSuggestions.length}) :</span>
                       </span>
                       <button
                         type="button"
                         onClick={() => setShowTitleSuggestions(false)}
-                        className="text-[10px] text-slate-400 hover:text-slate-200 px-1.5 py-0.5 rounded hover:bg-slate-800 transition cursor-pointer"
+                        className="text-[10px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded hover:bg-slate-800 transition cursor-pointer"
                       >
                         ✕ Fermer
                       </button>
                     </div>
+
                     {titleSuggestions.map((sug, idx) => (
                       <button
                         key={`${sug.title}-${sug.console}-${idx}`}
                         type="button"
-                        onMouseDown={(e) => {
-                          // Empêche la perte de focus prématurée avant que onClick s'exécute
+                        onPointerDown={(e) => {
                           e.preventDefault();
+                          handleSelectSuggestion(sug);
+                        }}
+                        onTouchEnd={(e) => {
+                          e.preventDefault();
+                          handleSelectSuggestion(sug);
                         }}
                         onClick={() => handleSelectSuggestion(sug)}
-                        className="w-full text-left p-2 rounded-lg hover:bg-amber-400/10 hover:border-amber-400/40 border border-transparent transition flex items-center justify-between gap-2 cursor-pointer group"
+                        className="w-full text-left p-2.5 rounded-lg hover:bg-amber-400/10 active:bg-amber-400/20 border border-transparent hover:border-amber-400/40 transition flex items-center justify-between gap-2.5 cursor-pointer group min-h-[48px]"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           {sug.coverUrl ? (
                             <img
                               src={getSafeCoverUrl(sug.coverUrl)}
                               alt=""
-                              className="w-7 h-9 object-contain bg-black/40 rounded border border-slate-700/60 shrink-0"
+                              className="w-8 h-10 object-contain bg-black/50 rounded border border-slate-700/60 shrink-0"
                               referrerPolicy="no-referrer"
                             />
                           ) : (
-                            <div className="w-7 h-9 rounded bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
-                              {sug.isGoogle ? <Globe className="w-3.5 h-3.5 text-blue-400" /> : <Boxes className="w-3.5 h-3.5 text-amber-400" />}
+                            <div className="w-8 h-10 rounded bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                              {sug.isGoogle ? <Globe className="w-4 h-4 text-blue-400" /> : <Boxes className="w-4 h-4 text-amber-400" />}
                             </div>
                           )}
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-xs font-bold text-slate-200 group-hover:text-amber-300 truncate">
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="text-xs font-bold text-slate-100 group-hover:text-amber-300 truncate">
                                 {sug.title}
                               </p>
-                              {sug.isGoogle && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-0.5 shrink-0">
-                                  <Globe className="w-2.5 h-2.5" />
-                                  Google
+                              {sug.isCatalog && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0">
+                                  Catalogue officiel
                                 </span>
                               )}
                               {sug.isLocal && (
@@ -1106,14 +1208,24 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                                   En stock
                                 </span>
                               )}
+                              {sug.isGoogle && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-0.5 shrink-0">
+                                  <Globe className="w-2.5 h-2.5" />
+                                  Google
+                                </span>
+                              )}
                             </div>
-                            <p className="text-[10px] text-slate-400 truncate">
-                              {sug.console} {sug.releaseYear ? `• ${sug.releaseYear}` : ''} {sug.genre ? `• ${sug.genre}` : ''}
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                              <span className="font-semibold text-slate-300">{sug.console}</span>
+                              {sug.releaseYear ? ` • ${sug.releaseYear}` : ''}
+                              {sug.publisher ? ` • ${sug.publisher}` : ''}
+                              {sug.genre ? ` • ${sug.genre}` : ''}
                             </p>
                           </div>
                         </div>
-                        <span className="text-[10px] font-pixel text-amber-400 shrink-0 opacity-80 group-hover:opacity-100">
-                          Sélectionner →
+
+                        <span className="text-[10px] font-pixel text-amber-400 shrink-0 px-2 py-1 rounded bg-amber-400/10 border border-amber-400/20 group-hover:bg-amber-400 group-hover:text-slate-950 transition">
+                          Choisir →
                         </span>
                       </button>
                     ))}

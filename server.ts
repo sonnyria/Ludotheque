@@ -176,6 +176,7 @@ const VERIFIED_BARCODES: Record<string, {
   '0045496420079': { title: 'The Legend of Zelda: Breath of the Wild', console: 'Nintendo Switch', releaseYear: 2017, publisher: 'Nintendo', developer: 'Nintendo EPD', genre: 'Action-Aventure', estimatedValue: 40 },
   '0045496420383': { title: 'Mario Kart 8 Deluxe', console: 'Nintendo Switch', releaseYear: 2017, publisher: 'Nintendo', developer: 'Nintendo EPD', genre: 'Course', estimatedValue: 38 },
   '0045496590741': { title: 'Super Mario Odyssey', console: 'Nintendo Switch', releaseYear: 2017, publisher: 'Nintendo', developer: 'Nintendo EPD', genre: 'Plates-formes', estimatedValue: 35 },
+  '045496420871': { title: 'Super Mario Odyssey', console: 'Nintendo Switch', releaseYear: 2017, publisher: 'Nintendo', developer: 'Nintendo EPD', genre: 'Plates-formes', estimatedValue: 35 },
   '0045496428457': { title: 'Metroid Dread', console: 'Nintendo Switch', releaseYear: 2021, publisher: 'Nintendo', developer: 'MercurySteam', genre: 'Metroidvania', estimatedValue: 32 },
   '0045496422776': { title: 'Super Smash Bros. Ultimate', console: 'Nintendo Switch', releaseYear: 2018, publisher: 'Nintendo', developer: 'Bandai Namco Studios / Sora Ltd.', genre: 'Combat', estimatedValue: 42 },
   '0045496425333': { title: 'Animal Crossing: New Horizons', console: 'Nintendo Switch', releaseYear: 2020, publisher: 'Nintendo', developer: 'Nintendo EPD', genre: 'Simulation', estimatedValue: 35 },
@@ -213,18 +214,25 @@ const VERIFIED_BARCODES: Record<string, {
   '5021290097650': { title: 'Final Fantasy VII Rebirth', console: 'PlayStation 5', releaseYear: 2024, publisher: 'Square Enix', developer: 'Square Enix', genre: 'Action-RPG', estimatedValue: 45 },
 
   // --- PlayStation 4 ---
+  '3307215984638': { title: "Assassin's Creed Valhalla", console: 'PlayStation 4', releaseYear: 2020, publisher: 'Ubisoft', developer: 'Ubisoft Montréal', genre: 'Action-RPG', estimatedValue: 16 },
+  '3307216065589': { title: "Assassin's Creed Odyssey", console: 'PlayStation 4', releaseYear: 2018, publisher: 'Ubisoft', developer: 'Ubisoft Québec', genre: 'Action-RPG', estimatedValue: 14 },
+  '3307215984607': { title: "Assassin's Creed Origins", console: 'PlayStation 4', releaseYear: 2017, publisher: 'Ubisoft', developer: 'Ubisoft Montréal', genre: 'Action-RPG', estimatedValue: 12 },
   '5026555416970': { title: 'Grand Theft Auto V', console: 'PlayStation 4', releaseYear: 2014, publisher: 'Rockstar Games', developer: 'Rockstar North', genre: 'Action-Aventure', estimatedValue: 14 },
+  '5026555424240': { title: 'Grand Theft Auto V: Premium Edition', console: 'PlayStation 4', releaseYear: 2018, publisher: 'Rockstar Games', developer: 'Rockstar North', genre: 'Action-Aventure', estimatedValue: 16 },
   '5026555424233': { title: 'Red Dead Redemption 2', console: 'PlayStation 4', releaseYear: 2018, publisher: 'Rockstar Games', developer: 'Rockstar Studios', genre: 'Action-Aventure', estimatedValue: 18 },
   '0711719808855': { title: 'The Last of Us Remastered', console: 'PlayStation 4', releaseYear: 2014, publisher: 'Sony Interactive Entertainment', developer: 'Naughty Dog', genre: 'Action-Aventure', estimatedValue: 12 },
   '0711719505853': { title: 'The Last of Us Part II', console: 'PlayStation 4', releaseYear: 2020, publisher: 'Sony Interactive Entertainment', developer: 'Naughty Dog', genre: 'Action-Aventure', estimatedValue: 20 },
   '0711719827856': { title: 'God of War', console: 'PlayStation 4', releaseYear: 2018, publisher: 'Sony Interactive Entertainment', developer: 'Santa Monica Studio', genre: 'Action-Aventure', estimatedValue: 12 },
   '0711719416852': { title: "Marvel's Spider-Man", console: 'PlayStation 4', releaseYear: 2018, publisher: 'Sony Interactive Entertainment', developer: 'Insomniac Games', genre: 'Action-Aventure', estimatedValue: 14 },
+  '0711719842491': { title: "Marvel's Spider-Man", console: 'PlayStation 4', releaseYear: 2018, publisher: 'Sony Interactive Entertainment', developer: 'Insomniac Games', genre: 'Action-Aventure', estimatedValue: 14 },
+  '711719842491': { title: "Marvel's Spider-Man", console: 'PlayStation 4', releaseYear: 2018, publisher: 'Sony Interactive Entertainment', developer: 'Insomniac Games', genre: 'Action-Aventure', estimatedValue: 14 },
   '0711719822851': { title: "Uncharted 4: A Thief's End", console: 'PlayStation 4', releaseYear: 2016, publisher: 'Sony Interactive Entertainment', developer: 'Naughty Dog', genre: 'Action-Aventure', estimatedValue: 10 },
   '0711719888857': { title: 'Bloodborne', console: 'PlayStation 4', releaseYear: 2015, publisher: 'Sony Interactive Entertainment', developer: 'FromSoftware', genre: 'Action-RPG', estimatedValue: 16 },
   '0711719714859': { title: 'Ghost of Tsushima', console: 'PlayStation 4', releaseYear: 2020, publisher: 'Sony Interactive Entertainment', developer: 'Sucker Punch Productions', genre: 'Action-Aventure', estimatedValue: 22 },
   '0711719833857': { title: 'Horizon Zero Dawn', console: 'PlayStation 4', releaseYear: 2017, publisher: 'Sony Interactive Entertainment', developer: 'Guerrilla Games', genre: 'Action-RPG', estimatedValue: 10 },
   '3391891981149': { title: 'The Witcher 3: Wild Hunt', console: 'PlayStation 4', releaseYear: 2015, publisher: 'CD Projekt RED', developer: 'CD Projekt RED', genre: 'Action-RPG', estimatedValue: 12 },
   '5030932111822': { title: 'Titanfall 2', console: 'PlayStation 4', releaseYear: 2016, publisher: 'Electronic Arts', developer: 'Respawn Entertainment', genre: 'FPS', estimatedValue: 8 },
+  '5030930113260': { title: 'FIFA 14', console: 'PlayStation 4', releaseYear: 2013, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 3 },
   '5030931103650': { title: 'FIFA 17', console: 'PlayStation 4', releaseYear: 2016, publisher: 'EA Sports', developer: 'EA Vancouver', genre: 'Sport', estimatedValue: 3 },
 
   // --- Xbox Series X|S & Xbox One ---
@@ -1591,27 +1599,51 @@ app.get('/api/games/google-suggest', async (req, res) => {
     if (!q || q.length < 2) {
       return res.json({ query: q, suggestions: [] });
     }
-    const url = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(q)}&hl=fr`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
-    const gRes = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-      }
-    });
+    const timeout = setTimeout(() => controller.abort(), 2800);
+
+    const [resDirect, resGaming] = await Promise.allSettled([
+      fetch(`https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(q)}&hl=fr`, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      }),
+      fetch(`https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(q + ' jeu video')}&hl=fr`, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      }),
+    ]);
     clearTimeout(timeout);
-    if (!gRes.ok) {
-      return res.json({ query: q, suggestions: [] });
-    }
-    const data: any = await gRes.json();
-    const rawList: string[] = Array.isArray(data?.[1]) ? data[1] : [];
-    const cleanList = rawList
-      .map((item: string) => item.replace(/<[^>]+>/g, '').trim())
-      .filter((item: string) => item.length > 0)
-      .slice(0, 8);
-    return res.json({ query: q, suggestions: cleanList });
+
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+
+    const parseSuggestResponse = async (result: PromiseSettledResult<Response>) => {
+      if (result.status === 'fulfilled' && result.value.ok) {
+        try {
+          const json: any = await result.value.json();
+          const items: string[] = Array.isArray(json?.[1]) ? json[1] : [];
+          for (const raw of items) {
+            const clean = raw
+              .replace(/<[^>]+>/g, '')
+              .replace(/\b(?:jeu\s*vid[eé]o|video\s*game|game)\b/gi, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            const key = clean.toLowerCase();
+            if (clean.length >= 2 && !seen.has(key)) {
+              seen.add(key);
+              candidates.push(clean);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    await parseSuggestResponse(resGaming);
+    await parseSuggestResponse(resDirect);
+
+    return res.json({ query: q, suggestions: candidates.slice(0, 10) });
   } catch {
     return res.json({ query: req.query.q || '', suggestions: [] });
   }
