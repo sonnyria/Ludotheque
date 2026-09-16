@@ -217,13 +217,25 @@ export async function validateGeminiApiKey(
 
 /**
  * Direct browser fallback to Google Gemini when server proxy is slow, rate-limited or offline
+ * Supports Google Search Grounding for live barcode web search
  */
-export async function callDirectGeminiJson(prompt: string, userKey?: string): Promise<any> {
+export async function callDirectGeminiJson(
+  prompt: string,
+  userKey?: string,
+  useGoogleSearch: boolean = false
+): Promise<any> {
   const key = (userKey || getStoredGeminiApiKey()).trim();
   if (!key) return null;
 
   for (const model of CLIENT_GEMINI_MODELS) {
     try {
+      const payload: any = {
+        contents: [{ parts: [{ text: prompt }] }],
+      };
+      if (useGoogleSearch) {
+        payload.tools = [{ google_search: {} }];
+      }
+
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
         {
@@ -232,13 +244,34 @@ export async function callDirectGeminiJson(prompt: string, userKey?: string): Pr
             'Content-Type': 'application/json',
             'x-goog-api-key': key,
           },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
-      if (!res.ok) continue;
+      if (!res.ok) {
+        // If google_search was not supported by this model, try without tools
+        if (useGoogleSearch) {
+          const fallbackRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': key,
+              },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+            }
+          );
+          if (!fallbackRes.ok) continue;
+          const fbData = await fallbackRes.json();
+          const fbText = fbData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const cleaned = fbText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+          const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+          if (match) return JSON.parse(match[0]);
+        }
+        continue;
+      }
+
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       if (!rawText) continue;

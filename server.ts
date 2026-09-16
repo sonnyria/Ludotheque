@@ -628,6 +628,39 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
       }
     })(),
 
+    // 1d. PriceCharting live video games database lookup (Direct UPC / barcode redirect)
+    (async () => {
+      try {
+        const pcCodes = [cleanCode, unpadded].filter((c, idx, arr) => c && c.length >= 8 && arr.indexOf(c) === idx);
+        for (const codeToTry of pcCodes) {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 3500);
+          const pcRes = await fetch(`https://www.pricecharting.com/search-products?q=${encodeURIComponent(codeToTry)}&type=videogames`, {
+            signal: controller.signal,
+            headers: { 'User-Agent': userAgent },
+            redirect: 'follow',
+          });
+          clearTimeout(timeout);
+          if (pcRes.ok && pcRes.url && pcRes.url.includes('/game/')) {
+            const urlParts = pcRes.url.split('/game/')[1]?.split('/');
+            if (urlParts && urlParts.length >= 2) {
+              const consoleSlug = urlParts[0].replace(/^pal-|^ntsc-/, '').replace(/-/g, ' ');
+              const html = await pcRes.text();
+              const titleMatch = html.match(/<h1[^>]*id="product_name"[^>]*>([\s\S]*?)<\/h1>/i);
+              const gameTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : urlParts[1].split('?')[0].replace(/-/g, ' ');
+              if (gameTitle) {
+                rawTitles.push(gameTitle);
+                rawSnippets.push(`PriceCharting: ${gameTitle} [${consoleSlug}]`);
+                break;
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })(),
+
     // 1d. Open Products Facts Live API check
     (async () => {
       try {
@@ -1520,18 +1553,68 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       });
     }
 
-    // 5. Optional fallback: Gemini AI if available and key provided
+    // 5. Automated Google Search via Gemini Search Grounding & AI models
     const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
       if (ai) {
         try {
-          const prompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo pour consoles.
+          let parsed: any = null;
+
+          // 5a. Prioritize Google Search Grounding: Gemini queries Google in real-time for this exact barcode
+          const searchPrompt = `Tu es un expert mondial en jeux vidéo physiques.
+Effectue une recherche Google en direct sur le web pour ce code-barres de jeu vidéo : "${cleanCode}".
+Lis les résultats de recherche Google (Fnac, Amazon, Micromania, etc.) et identifie le jeu vidéo officiel correspondant à ce code-barres.
+Réponds IMPÉRATIVEMENT sous forme de JSON strict :
+{
+  "title": "titre officiel du jeu (ex: Assassin's Creed Valhalla)",
+  "console": "console parmi ['Nintendo Switch', 'PlayStation 5', 'PlayStation 4', 'PlayStation 3', 'PlayStation 2', 'PlayStation 1', 'Xbox Series X|S', 'Xbox One', 'Xbox 360', 'Super Nintendo (SNES)', 'Nintendo 64', 'Nintendo GameCube', 'Game Boy / Advance', 'Nintendo 3DS / DS', 'PC', 'Autre']",
+  "releaseYear": 2020,
+  "publisher": "éditeur",
+  "developer": "développeur",
+  "genre": "genre principal en français",
+  "estimatedValue": 15,
+  "confidence": "high"
+}
+Si aucun jeu vidéo n'apparaît dans les résultats Google pour ce code, réponds {"confidence": "low"}.`;
+
+          for (const model of ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash']) {
+            try {
+              const response = await withTimeout(
+                ai.models.generateContent({
+                  model,
+                  contents: searchPrompt,
+                  config: {
+                    tools: [{ googleSearch: {} }],
+                  },
+                }),
+                7500,
+                `Timeout Google Search Grounding ${model}`
+              );
+
+              const text = response.text || '';
+              const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+              const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+              if (match) {
+                const resObj = JSON.parse(match[0]);
+                if (resObj && resObj.title && resObj.confidence !== 'low') {
+                  parsed = resObj;
+                  break;
+                }
+              }
+            } catch {
+              // Try next model or fallback
+            }
+          }
+
+          // 5b. Fallback to standard prompt without grounding if search grounding didn't resolve
+          if (!parsed) {
+            const fallbackPrompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo pour consoles.
 Le code-barres EAN/UPC suivant a été scanné sur la boîte d'un jeu vidéo physique : "${cleanCode}".
 Si ce code correspond avec CERTITUDE à un jeu vidéo précis, renvoie le JSON suivant :
 {
   "title": "titre officiel complet du jeu vidéo",
-  "console": "nom de la console parmi ['Nintendo Switch', 'PlayStation 5', 'PlayStation 4', 'PlayStation 3', 'PlayStation 2', 'PlayStation 1', 'Xbox Series X|S', 'Xbox One', 'Xbox 360', 'Super Nintendo (SNES)', 'Nintendo 64', 'Nintendo GameCube', 'Game Boy / Advance', 'Nintendo 3DS / DS', 'PC', 'Autre']",
+  "console": "nom de la console",
   "releaseYear": 2020,
   "publisher": "éditeur",
   "genre": "genre principal en français",
@@ -1539,8 +1622,9 @@ Si ce code correspond avec CERTITUDE à un jeu vidéo précis, renvoie le JSON s
   "confidence": "high"
 }
 Si tu n'es pas certain à 100% du jeu précis pour ce code-barres, réponds {"confidence": "low"}.`;
+            parsed = await generateGeminiJson(ai, fallbackPrompt, 4000);
+          }
 
-          const parsed = await generateGeminiJson(ai, prompt, 6000);
           if (parsed && parsed.title && parsed.title.trim() && parsed.confidence === 'high') {
             let autoCoverUrl: string | undefined = undefined;
             try {
@@ -1552,7 +1636,7 @@ Si tu n'es pas certain à 100% du jeu précis pour ce code-barres, réponds {"co
 
             return res.json({
               found: true,
-              source: 'gemini',
+              source: 'gemini-google-grounding',
               game: {
                 title: parsed.title,
                 console: parsed.console || 'Autre',

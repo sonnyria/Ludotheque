@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings, Loader2, ExternalLink, Globe } from 'lucide-react';
+import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings, Loader2, ExternalLink, Globe, ClipboardPaste, Key } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { estimateMarketValue } from '../utils/marketPriceGuide';
-import { getGeminiAuthHeaders, hasStoredGeminiApiKey, getStoredGeminiApiKey, callDirectGeminiJson } from '../utils/geminiApiKey';
+import { getGeminiAuthHeaders, hasStoredGeminiApiKey, getStoredGeminiApiKey, setStoredGeminiApiKey, callDirectGeminiJson } from '../utils/geminiApiKey';
 import { lookupBarcodeInCatalog, searchGamesInCatalog } from '../data/barcodeCatalog';
+import { parseGoogleResultText } from '../utils/googleSearchParser';
 
 export function getSafeCoverUrl(url?: string): string {
   if (!url) return '';
@@ -87,6 +88,58 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
   const lastSelectedTitleRef = useRef<string | null>(null);
   const suggestionsBoxRef = useRef<HTMLDivElement>(null);
+  const [inlineGeminiKey, setInlineGeminiKey] = useState('');
+  const [showInlineKeyInput, setShowInlineKeyInput] = useState(false);
+
+  const handlePasteGoogleInModal = async () => {
+    try {
+      let pasted = '';
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        try {
+          pasted = await navigator.clipboard.readText();
+        } catch {
+          // ignore
+        }
+      }
+      if (!pasted) {
+        pasted = window.prompt("Collez ici le titre ou texte copié depuis la recherche Google :") || '';
+      }
+      if (pasted && pasted.trim()) {
+        const parsed = parseGoogleResultText(pasted);
+        if (parsed.title) {
+          setTitle(parsed.title);
+          if (parsed.console && parsed.console !== 'Autre') {
+            setConsoleName(parsed.console);
+          }
+          if (parsed.releaseYear) {
+            setReleaseYear(parsed.releaseYear);
+          }
+          setLookupMessage({
+            type: 'success',
+            text: `Titre extrait de Google : "${parsed.title}" ${parsed.console ? `(${parsed.console})` : ''} ! Recherche de jaquette et cote en cours...`,
+          });
+          setActiveTab('manual');
+          handleAiEnrich(parsed.title, parsed.console);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSaveInlineGeminiKey = (key: string) => {
+    const trimmed = key.trim();
+    if (!trimmed) return;
+    setStoredGeminiApiKey(trimmed);
+    setShowInlineKeyInput(false);
+    setLookupMessage({
+      type: 'success',
+      text: `Clé IA Google activée ! Recherche automatique Google en arrière-plan en cours...`,
+    });
+    if (barcode) {
+      handleBarcodeDetected(barcode);
+    }
+  };
 
   // Close suggestions only when clicking/tapping completely outside the input and suggestions container
   useEffect(() => {
@@ -438,26 +491,28 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         return;
       }
 
-      // Si le serveur n'a rien trouvé mais que l'utilisateur a configuré sa clé Gemini, tenter un secours direct
+      // Si le serveur n'a rien trouvé mais que l'utilisateur a configuré sa clé Gemini, tenter un secours direct avec Google Search Grounding
       if (!data.found && hasStoredGeminiApiKey()) {
         try {
-          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques. Le code-barres EAN/UPC suivant se trouve sur la boîte d'un jeu vidéo console : "${cleanCode}".
-Identifie avec exactitude le jeu vidéo correspondant. Réponds avec un JSON strict :
+          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques.
+Effectue une recherche Google pour le code-barres EAN/UPC suivant d'un jeu vidéo console : "${cleanCode}".
+Lis les résultats de recherche Google en direct et identifie le jeu vidéo officiel correspondant à ce code.
+Réponds IMPÉRATIVEMENT avec un JSON strict :
 {
   "title": "titre officiel du jeu",
-  "console": "console (ex: Nintendo Switch, PlayStation 4, Xbox One, etc.)",
-  "releaseYear": 2018,
+  "console": "console (ex: Nintendo Switch, PlayStation 5, PlayStation 4, Xbox One, Xbox Series X|S, etc.)",
+  "releaseYear": 2020,
   "publisher": "éditeur",
   "genre": "genre en français",
   "synopsis": "résumé en 1 phrase",
   "estimatedValue": 15
 }`;
-          const directData = await callDirectGeminiJson(directPrompt, userKey);
+          const directData = await callDirectGeminiJson(directPrompt, userKey, true);
           if (directData && directData.title) {
             applyGameDetails({ ...directData, barcode: cleanCode });
             setLookupMessage({
               type: 'success',
-              text: `Jeu identifié par IA Gemini : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
+              text: `Jeu identifié via recherche Google en tâche de fond : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
             });
             setIsSearching(false);
             setActiveTab('manual');
@@ -471,23 +526,26 @@ Identifie avec exactitude le jeu vidéo correspondant. Réponds avec un JSON str
       // Fallback secours direct navigateur si le serveur est inaccessible
       if (hasStoredGeminiApiKey()) {
         try {
-          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques. Le code-barres EAN/UPC suivant se trouve sur la boîte d'un jeu vidéo console : "${cleanCode}".
-Identifie avec exactitude le jeu vidéo correspondant. Réponds avec un JSON strict :
+          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques.
+Effectue une recherche Google pour le code-barres EAN/UPC suivant d'un jeu vidéo console : "${cleanCode}".
+Lis les résultats de recherche Google en direct et identifie le jeu vidéo officiel correspondant à ce code.
+Réponds IMPÉRATIVEMENT avec un JSON strict :
 {
   "title": "titre officiel du jeu",
-  "console": "console (ex: Nintendo Switch, PlayStation 4, Xbox One, etc.)",
-  "releaseYear": 2018,
+  "console": "console (ex: Nintendo Switch, PlayStation 5, PlayStation 4, Xbox One, Xbox Series X|S, etc.)",
+  "releaseYear": 2020,
   "publisher": "éditeur",
   "genre": "genre en français",
   "synopsis": "résumé en 1 phrase",
   "estimatedValue": 15
 }`;
-          const directData = await callDirectGeminiJson(directPrompt);
+          const fallbackKey = getStoredGeminiApiKey();
+          const directData = await callDirectGeminiJson(directPrompt, fallbackKey, true);
           if (directData && directData.title) {
             applyGameDetails({ ...directData, barcode: cleanCode });
             setLookupMessage({
               type: 'success',
-              text: `Jeu identifié par IA Gemini : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
+              text: `Jeu identifié via recherche Google en tâche de fond : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
             });
             setIsSearching(false);
             setActiveTab('manual');
@@ -870,16 +928,24 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
             <div className="flex-1 space-y-1.5">
               <span>{lookupMessage.text}</span>
               {lookupMessage.type === 'warning' && (title || barcode) && (
-                <div className="pt-1 flex flex-wrap items-center gap-2">
+                <div className="pt-1.5 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePasteGoogleInModal}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold font-pixel text-[10px] transition cursor-pointer shadow-xs"
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5" />
+                    <span>Coller le titre copié sur Google</span>
+                  </button>
                   {barcode && (
                     <a
                       href={`https://www.google.com/search?q=${encodeURIComponent(barcode)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
                     >
                       <ExternalLink className="w-3 h-3" />
-                      <span>Google Code-barres ({barcode})</span>
+                      <span>Ouvrir Google ({barcode})</span>
                     </a>
                   )}
                   {title && (
@@ -887,7 +953,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                       href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${title} ${finalConsole !== 'Autre' ? finalConsole : ''} jaquette box art`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
                     >
                       <ExternalLink className="w-3 h-3" />
                       <span>Google Images ({title})</span>
@@ -895,19 +961,72 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                   )}
                 </div>
               )}
-              {lookupMessage.type !== 'success' && !hasStoredGeminiApiKey() && onOpenSettings && (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenSettings();
-                    }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
-                  >
-                    <Settings className="w-3 h-3 text-slate-950" />
-                    <span>Ajouter votre clé API Gemini pour l'IA en ligne</span>
-                  </button>
+              {lookupMessage.type !== 'success' && !hasStoredGeminiApiKey() && (
+                <div className="mt-2 pt-2 border-t border-amber-500/30">
+                  {!showInlineKeyInput ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] text-amber-300 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span>Recherche Google automatique en tâche de fond (IA)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowInlineKeyInput(true)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg font-bold font-pixel text-[9px] transition cursor-pointer shadow-2xs"
+                      >
+                        <Key className="w-3 h-3 text-slate-950" />
+                        <span>Activer en 1 clic (clé gratuite)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-slate-900/90 border border-amber-400/40 rounded-xl space-y-2 mt-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                        <span className="flex items-center gap-1.5">
+                          <Key className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Activer la lecture automatique des résultats Google</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowInlineKeyInput(false)}
+                          className="text-[10px] text-slate-400 hover:text-white cursor-pointer"
+                        >
+                          ✕ Fermer
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-300">
+                        Collez votre clé API Google Gemini gratuite. L'application lira directement les résultats Google de vos codes-barres en arrière-plan sans action manuelle :
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          placeholder="AIzaSy..."
+                          value={inlineGeminiKey}
+                          onChange={(e) => setInlineGeminiKey(e.target.value)}
+                          className="flex-1 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 font-mono focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                        <button
+                          type="button"
+                          disabled={!inlineGeminiKey.trim()}
+                          onClick={() => handleSaveInlineGeminiKey(inlineGeminiKey)}
+                          className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 rounded-lg font-bold font-pixel text-[10px] transition cursor-pointer shrink-0"
+                        >
+                          Activer & Scanner
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between text-[9px] text-slate-400">
+                        <span>Clé 100% gratuite Google AI Studio</span>
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-amber-400 hover:underline flex items-center gap-0.5"
+                        >
+                          <span>Obtenir une clé</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

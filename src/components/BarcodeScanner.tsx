@@ -16,11 +16,13 @@ import {
   Loader2,
   ExternalLink,
   Globe,
-  Check
+  Check,
+  ClipboardPaste
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { SAMPLE_BARCODES } from '../data/sampleGames';
 import { Game } from '../types';
+import { parseGoogleResultText } from '../utils/googleSearchParser';
 
 interface BarcodeScannerProps {
   onBarcodeDetected: (barcode: string) => void;
@@ -598,20 +600,52 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           {/* Google Search Direct Assist Card */}
           {manualCode.trim().replace(/\D/g, '').length >= 6 && (
             <div className="p-3 bg-white border border-blue-200 rounded-xl shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-blue-900 flex items-center gap-1.5">
                   <Globe className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Vérification Google pour ce code ({manualCode.trim()})</span>
+                  <span>Vérification Google ({manualCode.trim()})</span>
                 </span>
-                <a
-                  href={`https://www.google.com/search?q=${encodeURIComponent(manualCode.trim())}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1"
-                >
-                  <span>Ouvrir Google</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        let text = '';
+                        if (navigator.clipboard && navigator.clipboard.readText) {
+                          try {
+                            text = await navigator.clipboard.readText();
+                          } catch {
+                            // ignore
+                          }
+                        }
+                        if (!text) {
+                          text = window.prompt("Collez le titre copié depuis la recherche Google :") || '';
+                        }
+                        if (text && text.trim()) {
+                          const parsed = parseGoogleResultText(text);
+                          if (parsed.title) {
+                            handleSelectGoogleSuggestion(parsed.title);
+                          }
+                        }
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className="text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded-md border border-blue-200 font-bold flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                  >
+                    <ClipboardPaste className="w-3 h-3 text-blue-600" />
+                    <span>Coller le titre</span>
+                  </button>
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(manualCode.trim())}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1"
+                  >
+                    <span>Ouvrir Google</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
               <p className="text-[11px] text-slate-600">
                 Vous avez le titre affiché sur Google ? Tapez-le ici pour autocompléter la fiche instantanément :
