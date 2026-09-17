@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
+import { BARCODE_CATALOG } from './src/data/barcodeCatalog';
 // Aucune base de données interne : toutes les recherches s'effectuent en direct sur le web
 
 dotenv.config();
@@ -158,7 +159,12 @@ function extractNumericValue(val: any, fallback: number): number {
 
 // Clean barcode string
 function normalizeBarcode(code: string): string {
-  return code.replace(/\D/g, '').trim();
+  const cleaned = code.replace(/\D/g, '').trim();
+  // Reject dummy barcodes composed of identical repeated digits (e.g. 0000000000000)
+  if (/^(\d)\1+$/.test(cleaned) && cleaned.length >= 6) {
+    return '';
+  }
+  return cleaned;
 }
 
 // Curated dictionary of verified, authentic video game barcodes (European, French, and international physical releases)
@@ -322,16 +328,39 @@ function lookupVerifiedBarcode(cleanCode: string): {
   estimatedValue?: number;
 } | null {
   if (!cleanCode) return null;
-  const direct = VERIFIED_BARCODES[cleanCode];
-  if (direct) return direct;
 
+  // 1. Direct match in BARCODE_CATALOG or VERIFIED_BARCODES
+  if (BARCODE_CATALOG[cleanCode]) return BARCODE_CATALOG[cleanCode];
+  if (VERIFIED_BARCODES[cleanCode]) return VERIFIED_BARCODES[cleanCode];
+
+  // 2. Unpadded match (without leading zeros)
   const unpadded = cleanCode.replace(/^0+/, '');
   if (unpadded && unpadded !== cleanCode) {
-    const unpaddedMatch = VERIFIED_BARCODES[unpadded];
-    if (unpaddedMatch) return unpaddedMatch;
+    if (BARCODE_CATALOG[unpadded]) return BARCODE_CATALOG[unpadded];
+    if (VERIFIED_BARCODES[unpadded]) return VERIFIED_BARCODES[unpadded];
   }
 
-  // Also check if any key ends with cleanCode or vice versa (EAN-13 vs UPC-12)
+  // 3. EAN-13 padding (0 + 12 digits UPC)
+  if (cleanCode.length === 12) {
+    const pad13 = '0' + cleanCode;
+    if (BARCODE_CATALOG[pad13]) return BARCODE_CATALOG[pad13];
+    if (VERIFIED_BARCODES[pad13]) return VERIFIED_BARCODES[pad13];
+  }
+
+  // 4. UPC-12 slice (strip leading 0 from 13 digits)
+  if (cleanCode.length === 13 && cleanCode.startsWith('0')) {
+    const slice12 = cleanCode.slice(1);
+    if (BARCODE_CATALOG[slice12]) return BARCODE_CATALOG[slice12];
+    if (VERIFIED_BARCODES[slice12]) return VERIFIED_BARCODES[slice12];
+  }
+
+  // 5. Soft match
+  for (const [k, v] of Object.entries(BARCODE_CATALOG)) {
+    const kUnpadded = k.replace(/^0+/, '');
+    if (k === cleanCode || kUnpadded === unpadded) {
+      return v;
+    }
+  }
   for (const [k, v] of Object.entries(VERIFIED_BARCODES)) {
     const kUnpadded = k.replace(/^0+/, '');
     if (k === cleanCode || kUnpadded === unpadded) {
@@ -798,7 +827,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   }
 
   // Extract clean game titles from raw titles
-  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|cologne|eau\s*de|fragrance|deodorant|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking|vinyl|album|audio\s*cd|cassette|3lp|2cd|discogs|record\b|dress|shirt|shoes|jacket|apparel|anniversary\b|tour\b|live\s*in\b|remastered\s*vinyl)/i;
+  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|cologne|eau\s*de|fragrance|deodorant|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking|vinyl|album|audio\s*cd|cassette|3lp|2cd|discogs|record\b|dress|shirt|shoes|jacket|apparel|anniversary\b|tour\b|live\s*in\b|remastered\s*vinyl|youtube|google|wikipedia|facebook|twitter|instagram|reddit|tiktok|vimeo|dailymotion|imdb|linkedin)/i;
 
   function scoreGameCandidate(candidate: string, fullContext: string): number {
     let score = 0;
@@ -884,7 +913,8 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   // Sort candidates by gaming score first, then frequency
   cleanCandidates.sort((a, b) => b.score - a.score);
   const bestCandidate = cleanCandidates[0];
-  if (bestCandidate.score < -50) return null;
+  if (bestCandidate.score <= 0 && detectedConsole === 'Autre') return null;
+  if (bestCandidate.score < -20) return null;
 
   const bestTitle = bestCandidate.title;
 

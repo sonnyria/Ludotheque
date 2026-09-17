@@ -1003,6 +1003,196 @@ export const BARCODE_CATALOG: Record<string, CatalogGame> = {
     genre: 'RPG',
     estimatedValue: 90,
   },
+  '0045496428136': {
+    title: 'Pokémon Diamant Étincelant',
+    console: 'Nintendo Switch',
+    releaseYear: 2021,
+    publisher: 'Nintendo',
+    developer: 'ILCA',
+    genre: 'RPG',
+    estimatedValue: 30,
+    synopsis: 'Remake fidèle de Pokémon Diamant dans la région de Sinnoh.'
+  },
+  '0045496428181': {
+    title: 'Pokémon Perle Scintillante',
+    console: 'Nintendo Switch',
+    releaseYear: 2021,
+    publisher: 'Nintendo',
+    developer: 'ILCA',
+    genre: 'RPG',
+    estimatedValue: 30,
+    synopsis: 'Remake fidèle de Pokémon Perle dans la région de Sinnoh.'
+  },
+  '0045496424565': {
+    title: 'Pokémon Épée',
+    console: 'Nintendo Switch',
+    releaseYear: 2019,
+    publisher: 'Nintendo',
+    developer: 'Game Freak',
+    genre: 'RPG',
+    estimatedValue: 30,
+    synopsis: 'Aventure Pokémon dans la région de Galar inspirée de la Grande-Bretagne.'
+  },
+  '0045496424619': {
+    title: 'Pokémon Bouclier',
+    console: 'Nintendo Switch',
+    releaseYear: 2019,
+    publisher: 'Nintendo',
+    developer: 'Game Freak',
+    genre: 'RPG',
+    estimatedValue: 30,
+    synopsis: 'Aventure Pokémon dans la région de Galar avec les Terres Sauvages.'
+  },
+  '0045496423131': {
+    title: 'New Super Mario Bros. U Deluxe',
+    console: 'Nintendo Switch',
+    releaseYear: 2019,
+    publisher: 'Nintendo',
+    developer: 'Nintendo EPD',
+    genre: 'Plates-formes',
+    estimatedValue: 35,
+    synopsis: 'Plateforme 2D Mario en multijoueur avec 164 stages.'
+  },
+  '0045496425944': {
+    title: 'Xenoblade Chronicles: Definitive Edition',
+    console: 'Nintendo Switch',
+    releaseYear: 2020,
+    publisher: 'Nintendo',
+    developer: 'Monolith Soft',
+    genre: 'J-RPG',
+    estimatedValue: 35,
+    synopsis: 'RPG d\'envergure sur les titans Bionis et Mékonis avec Shulk et la Monado.'
+  },
+  '0045496428389': {
+    title: 'Kirby et le monde oublié',
+    console: 'Nintendo Switch',
+    releaseYear: 2022,
+    publisher: 'Nintendo',
+    developer: 'HAL Laboratory',
+    genre: 'Plates-formes',
+    estimatedValue: 35,
+    synopsis: 'Première grande aventure 3D pour Kirby dans une civilisation mystérieuse.'
+  },
+  '0045496424855': {
+    title: 'Splatoon 3',
+    console: 'Nintendo Switch',
+    releaseYear: 2022,
+    publisher: 'Nintendo',
+    developer: 'Nintendo EPD',
+    genre: 'Tir à la troisième personne',
+    estimatedValue: 30,
+    synopsis: 'Guerres de territoire à l\'encre dans la région torride de Cité-Clabousse.'
+  },
+  '0045496420550': {
+    title: 'Splatoon 2',
+    console: 'Nintendo Switch',
+    releaseYear: 2017,
+    publisher: 'Nintendo',
+    developer: 'Nintendo EPD',
+    genre: 'Tir à la troisième personne',
+    estimatedValue: 20,
+    synopsis: 'Batailles de peinture frénétiques en ligne et mode Salmon Run.'
+  },
+  '0045496421007': {
+    title: 'Fire Emblem: Three Houses',
+    console: 'Nintendo Switch',
+    releaseYear: 2019,
+    publisher: 'Nintendo',
+    developer: 'Intelligent Systems',
+    genre: 'Tactical RPG',
+    estimatedValue: 38,
+    synopsis: 'Tactical RPG stratégique au Monastère de Garreg Mach à Fódlan.'
+  },
+  '0711719399858': {
+    title: 'Returnal',
+    console: 'PlayStation 5',
+    releaseYear: 2021,
+    publisher: 'Sony Interactive Entertainment',
+    developer: 'Housemarque',
+    genre: 'Roguelike / TPS',
+    estimatedValue: 28,
+    synopsis: 'Jeu d\'action roguelike spatial sombre et intense sur la planète Atropos.'
+  },
+  '5021290096356': {
+    title: 'Final Fantasy XVI',
+    console: 'PlayStation 5',
+    releaseYear: 2023,
+    publisher: 'Square Enix',
+    developer: 'Creative Business Unit III',
+    genre: 'Action-RPG',
+    estimatedValue: 32,
+    synopsis: 'Sombre épopée médiévale fantastique suivant Clive Rosfield à Valisthéa.'
+  },
+  '5021290097650': {
+    title: 'Final Fantasy VII Rebirth',
+    console: 'PlayStation 5',
+    releaseYear: 2024,
+    publisher: 'Square Enix',
+    developer: 'Square Enix',
+    genre: 'Action-RPG',
+    estimatedValue: 45,
+    synopsis: 'Poursuite de l\'aventure de Cloud et ses amis à travers la vaste planète.'
+  },
+  '711719842491': {
+    title: "Marvel's Spider-Man",
+    console: 'PlayStation 4',
+    releaseYear: 2018,
+    publisher: 'Sony Interactive Entertainment',
+    developer: 'Insomniac Games',
+    genre: 'Action-Aventure',
+    estimatedValue: 14,
+    synopsis: 'Voltigez dans New York dans la peau de Peter Parker face aux Sinister Six.'
+  },
+  '5026555280181': {
+    title: 'Grand Theft Auto IV',
+    console: 'Xbox 360',
+    releaseYear: 2008,
+    publisher: 'Rockstar Games',
+    developer: 'Rockstar North',
+    genre: 'Action-Aventure',
+    estimatedValue: 8,
+    synopsis: 'Le périple de Niko Bellic pour vivre le rêve américain à Liberty City.'
+  },
+  '5026555404502': {
+    title: 'Grand Theft Auto V',
+    console: 'Xbox 360',
+    releaseYear: 2013,
+    publisher: 'Rockstar Games',
+    developer: 'Rockstar North',
+    genre: 'Action-Aventure',
+    estimatedValue: 8,
+    synopsis: 'Les braquages épiques de Michael, Franklin et Trevor à Los Santos.'
+  },
+  '5030932124363': {
+    title: 'FIFA 23',
+    console: 'PlayStation 5',
+    releaseYear: 2022,
+    publisher: 'EA Sports',
+    developer: 'EA Vancouver',
+    genre: 'Sport',
+    estimatedValue: 12,
+    synopsis: 'La technologie HyperMotion2 et les Coupes du Monde masculine et féminine.'
+  },
+  '5030930124316': {
+    title: 'EA Sports FC 24',
+    console: 'Nintendo Switch',
+    releaseYear: 2023,
+    publisher: 'EA Sports',
+    developer: 'EA Vancouver',
+    genre: 'Sport',
+    estimatedValue: 16,
+    synopsis: 'Nouvelle ère du football virtuel propulsé par le moteur Frostbite.'
+  },
+  '5030930122817': {
+    title: 'FIFA 22',
+    console: 'PlayStation 5',
+    releaseYear: 2021,
+    publisher: 'EA Sports',
+    developer: 'EA Vancouver',
+    genre: 'Sport',
+    estimatedValue: 8,
+    synopsis: 'Football réaliste avec la technologie HyperMotion nouvelle génération.'
+  },
 };
 
 // Recherche instantanée avec normalisation robuste des codes-barres (12 ou 13 chiffres, avec ou sans 0 initial)
