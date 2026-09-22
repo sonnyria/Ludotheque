@@ -1659,65 +1659,6 @@ Utilise "high" seulement si plusieurs résultats indépendants concordent sur le
       }
     }
 
-    // 3. OpenProductsFacts - ONLY if verified to be a video game / console item
-    let opfTitle: string | null = null;
-    let opfBrand: string | null = null;
-    let opfImage: string | null = null;
-    try {
-      const opfController = new AbortController();
-      const opfTimeout = setTimeout(() => opfController.abort(), 2000);
-      const opfRes = await fetch(`https://world.openproductsfacts.org/api/v0/product/${cleanCode}.json`, {
-        signal: opfController.signal,
-        headers: { 'User-Agent': 'GameVaultApp/1.0 (contact@gamecollection.local)' }
-      });
-      clearTimeout(opfTimeout);
-      if (opfRes.ok) {
-        const opfData: any = await opfRes.json();
-        if (opfData.status === 1 && opfData.product) {
-          const p = opfData.product;
-          const rawProductName = p.product_name || p.product_name_fr || p.product_name_en;
-          const categories = (p.categories || '') + ' ' + (p.categories_tags?.join(' ') || '');
-          const brand = p.brands || '';
-          // Ensure it's not a grocery or cosmetic product
-          const isGameOrMedia = /video game|jeu vid|nintendo|sony|playstation|xbox|sega|capcom|bandai|square enix|ubisoft|electronic arts|konami|activision/i.test(
-            (rawProductName || '') + ' ' + categories + ' ' + brand
-          );
-          if (rawProductName && rawProductName.trim() && isGameOrMedia) {
-            opfTitle = rawProductName.trim();
-            opfBrand = p.brands || null;
-            opfImage = p.image_url ? `/api/covers/proxy?url=${encodeURIComponent(p.image_url)}` : null;
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    if (opfTitle) {
-      let autoCover: string | undefined = undefined;
-      try {
-        const fc = await findOfficialCover(opfTitle);
-        if (fc) autoCover = fc;
-      } catch {
-        // ignore
-      }
-
-      return res.json({
-        found: true,
-        source: 'openproductsfacts',
-        game: {
-          title: opfTitle,
-          console: 'Autre',
-          publisher: opfBrand || undefined,
-          genre: guessGameGenre(opfTitle),
-          estimatedValue: guessEstimatedValue(opfTitle, 'Autre'),
-          barcode: cleanCode,
-          coverUrl: autoCover || opfImage || undefined,
-          confidence: 'medium'
-        }
-      });
-    }
-
     // 3b. Free barcode API fallback (no key required): BarcodeFinder
     // Useful when a barcode database has the exact product record but search-engine scraping misses it.
     try {
@@ -1738,7 +1679,7 @@ Utilise "high" seulement si plusieurs résultats indépendants concordent sur le
 
         if (
           apiTitle &&
-          /(?:video game|jeu vidéo|game|playstation|xbox|nintendo|switch|sega|atari|pc gaming)/i.test(gameContext)
+          /(?:video game|jeu vidéo|playstation|xbox|nintendo|switch|sega|atari|pc gaming)/i.test(gameContext)
         ) {
           let autoCover: string | undefined;
           try {
@@ -1818,6 +1759,65 @@ Utilise "high" seulement si plusieurs résultats indépendants concordent sur le
           barcode: cleanCode,
           confidence: 'high',
           coverUrl: autoCoverUrl || undefined,
+        }
+      });
+    }
+
+    // 3. OpenProductsFacts - ONLY if verified to be a video game / console item
+    let opfTitle: string | null = null;
+    let opfBrand: string | null = null;
+    let opfImage: string | null = null;
+    try {
+      const opfController = new AbortController();
+      const opfTimeout = setTimeout(() => opfController.abort(), 2000);
+      const opfRes = await fetch(`https://world.openproductsfacts.org/api/v0/product/${cleanCode}.json`, {
+        signal: opfController.signal,
+        headers: { 'User-Agent': 'GameVaultApp/1.0 (contact@gamecollection.local)' }
+      });
+      clearTimeout(opfTimeout);
+      if (opfRes.ok) {
+        const opfData: any = await opfRes.json();
+        if (opfData.status === 1 && opfData.product) {
+          const p = opfData.product;
+          const rawProductName = p.product_name || p.product_name_fr || p.product_name_en;
+          const categories = (p.categories || '') + ' ' + (p.categories_tags?.join(' ') || '');
+          const brand = p.brands || '';
+          // Ensure it's not a grocery or cosmetic product
+          const isGameOrMedia = /video game|jeu vid|nintendo|sony|playstation|xbox|sega|capcom|bandai|square enix|ubisoft|electronic arts|konami|activision/i.test(
+            (rawProductName || '') + ' ' + categories + ' ' + brand
+          );
+          if (rawProductName && rawProductName.trim() && isGameOrMedia) {
+            opfTitle = rawProductName.trim();
+            opfBrand = p.brands || null;
+            opfImage = p.image_url ? `/api/covers/proxy?url=${encodeURIComponent(p.image_url)}` : null;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (opfTitle) {
+      let autoCover: string | undefined = undefined;
+      try {
+        const fc = await findOfficialCover(opfTitle);
+        if (fc) autoCover = fc;
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: 'openproductsfacts',
+        game: {
+          title: opfTitle,
+          console: 'Autre',
+          publisher: opfBrand || undefined,
+          genre: guessGameGenre(opfTitle),
+          estimatedValue: guessEstimatedValue(opfTitle, 'Autre'),
+          barcode: cleanCode,
+          coverUrl: autoCover || opfImage || undefined,
+          confidence: 'medium'
         }
       });
     }
