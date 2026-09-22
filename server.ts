@@ -28,8 +28,7 @@ app.use((req, res, next) => {
 });
 
 // Lazy GoogleGenAI initialization
-const USER_FALLBACK_KEY = 'AQ.Ab8RN6JgiQdl4zhoq5GE37BPG_dASnP3lD3CwQ0nFKaLbcVfLg';
-let activeServerApiKey = USER_FALLBACK_KEY;
+const activeServerApiKey = process.env.GEMINI_API_KEY?.trim() || '';
 let aiClient: GoogleGenAI | null = null;
 
 function getAi(customKey?: string): GoogleGenAI | null {
