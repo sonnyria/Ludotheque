@@ -1153,6 +1153,15 @@ export const BARCODE_CATALOG: Record<string, CatalogGame> = {
     estimatedValue: 8,
     synopsis: 'Le périple de Niko Bellic pour vivre le rêve américain à Liberty City.'
   },
+  '5035225121617': {
+    title: 'Star Wars Battlefront II',
+    console: 'Xbox One',
+    releaseYear: 2017,
+    publisher: 'Electronic Arts',
+    developer: 'DICE',
+    genre: 'Tir / FPS',
+    estimatedValue: 12,
+  },
   '5026555404502': {
     title: 'Grand Theft Auto V',
     console: 'Xbox 360',
