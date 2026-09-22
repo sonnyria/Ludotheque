@@ -556,10 +556,8 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   genre?: string;
   rawText?: string;
 } | null> {
-  const googleResult = await searchGoogleBarcode(cleanCode);
-  if (googleResult?.title) {
-    return googleResult;
-  }
+  // Ne pas utiliser un seul résultat Google HTML comme vérité : les résultats peuvent être
+  // des marketplaces, des pages hors sujet ou des variantes régionales.
   if (!cleanCode || cleanCode.length < 6) return null;
 
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -1612,7 +1610,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
-      const apiRes = await fetch(`https://api.barcodefinder.info/barcode/${encodeURIComponent(cleanCode)}`, {
+      const apiRes = await fetch(`https://www.barcodefinder.info/v1/product/${encodeURIComponent(cleanCode)}`, {
         signal: controller.signal,
         headers: { 'User-Agent': 'Ludotheque/1.0' },
       });
@@ -1711,32 +1709,45 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       });
     }
 
-    // 5. Automated Google Search via Gemini Search Grounding & AI models
+    // 3. PRIMARY WEB IDENTIFICATION: Gemini + Google Search Grounding
+    // Gemini utilise ici la recherche Google en temps réel. On n'accepte le résultat
+    // que si la réponse est appuyée par plusieurs sources web distinctes.
     const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
       if (ai) {
         try {
           let parsed: any = null;
+          let groundingSources: Array<{ title: string; url: string }> = [];
 
-          // 5a. Prioritize Google Search Grounding: Gemini queries Google in real-time for this exact barcode
-          const searchPrompt = `Tu es un expert mondial en jeux vidéo physiques.
-Effectue une recherche Google en direct sur le web pour ce code-barres de jeu vidéo : "${cleanCode}".
-Lis les résultats de recherche Google (Fnac, Amazon, Micromania, etc.) et identifie le jeu vidéo officiel correspondant à ce code-barres.
-Réponds IMPÉRATIVEMENT sous forme de JSON strict :
+          const searchPrompt = `Tu dois identifier EXACTEMENT le jeu vidéo physique correspondant au code-barres EAN/UPC suivant : "${cleanCode}".
+
+Utilise obligatoirement Google Search pour rechercher ce code exact sur le Web.
+Analyse plusieurs résultats, en donnant la priorité aux résultats qui associent explicitement ce code-barres à un produit :
+- boutiques et marketplaces de jeux vidéo ;
+- bases spécialisées de jeux vidéo ;
+- fiches produit de fabricants/éditeurs ou distributeurs ;
+- résultats Google placés parmi les premiers résultats.
+
+Ne devine jamais un titre à partir d'une simple ressemblance.
+Ne confonds pas une autre édition, une autre console, une autre région ou un autre jeu de la même série.
+Si les sources ne permettent pas d'identifier le produit avec suffisamment de certitude, retourne confidence "low".
+
+Réponds EXCLUSIVEMENT avec un objet JSON :
 {
-  "title": "titre officiel du jeu (ex: Assassin's Creed Valhalla)",
-  "console": "console parmi ['Nintendo Switch', 'PlayStation 5', 'PlayStation 4', 'PlayStation 3', 'PlayStation 2', 'PlayStation 1', 'Xbox Series X|S', 'Xbox One', 'Xbox 360', 'Super Nintendo (SNES)', 'Nintendo 64', 'Nintendo GameCube', 'Game Boy / Advance', 'Nintendo 3DS / DS', 'PC', 'Autre']",
+  "title": "titre officiel exact",
+  "console": "console exacte",
   "releaseYear": 2020,
   "publisher": "éditeur",
   "developer": "développeur",
   "genre": "genre principal en français",
   "estimatedValue": 15,
-  "confidence": "high"
+  "confidence": "high|medium|low"
 }
-Si aucun jeu vidéo n'apparaît dans les résultats Google pour ce code, réponds {"confidence": "low"}.`;
 
-          for (const model of ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash']) {
+Règle de validation : confidence "high" uniquement si plusieurs résultats indépendants concordent sur le même titre et la même édition/console, ou si une source particulièrement fiable relie explicitement le code-barres à ce produit.`;
+
+          for (const model of GEMINI_MODELS.slice(0, 3)) {
             try {
               const response = await withTimeout(
                 ai.models.generateContent({
@@ -1751,40 +1762,33 @@ Si aucun jeu vidéo n'apparaît dans les résultats Google pour ce code, répond
               );
 
               const text = response.text || '';
-              const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-              const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-              if (match) {
-                const resObj = JSON.parse(match[0]);
-                if (resObj && resObj.title && resObj.confidence !== 'low') {
-                  parsed = resObj;
-                  break;
-                }
+              const cleaned = text.replace(/\`\`\`(?:json)?/gi, '').replace(/\`\`\`/g, '').trim();
+              const match = cleaned.match(/(\\{[\\s\\S]*\\}|\\[[\\s\\S]*\\])/);
+              if (!match) continue;
+
+              const candidate = JSON.parse(match[0]);
+              const metadata = (response as any).candidates?.[0]?.groundingMetadata;
+              const chunks = Array.isArray(metadata?.groundingChunks) ? metadata.groundingChunks : [];
+              groundingSources = chunks
+                .map((chunk: any) => chunk?.web)
+                .filter((web: any) => web?.uri)
+                .map((web: any) => ({ title: String(web.title || '').trim(), url: String(web.uri) }))
+                .filter((source: { title: string; url: string }, index: number, arr: Array<{ title: string; url: string }>) =>
+                  arr.findIndex(item => item.url === source.url) === index
+                )
+                .slice(0, 8);
+
+              if (candidate?.title && candidate.confidence !== 'low' && groundingSources.length >= 2) {
+                parsed = candidate;
+                break;
               }
             } catch {
-              // Try next model or fallback
+              // Essayer le modèle Gemini suivant.
             }
           }
 
-          // 5b. Fallback to standard prompt without grounding if search grounding didn't resolve
-          if (!parsed) {
-            const fallbackPrompt = `Tu es un expert mondial en jeux vidéo physiques, code-barres EAN-13 et UPC de jeux vidéo pour consoles.
-Le code-barres EAN/UPC suivant a été scanné sur la boîte d'un jeu vidéo physique : "${cleanCode}".
-Si ce code correspond avec CERTITUDE à un jeu vidéo précis, renvoie le JSON suivant :
-{
-  "title": "titre officiel complet du jeu vidéo",
-  "console": "nom de la console",
-  "releaseYear": 2020,
-  "publisher": "éditeur",
-  "genre": "genre principal en français",
-  "estimatedValue": 15,
-  "confidence": "high"
-}
-Si tu n'es pas certain à 100% du jeu précis pour ce code-barres, réponds {"confidence": "low"}.`;
-            parsed = await generateGeminiJson(ai, fallbackPrompt, 4000);
-          }
-
-          if (parsed && parsed.title && parsed.title.trim() && parsed.confidence === 'high') {
-            let autoCoverUrl: string | undefined = undefined;
+          if (parsed?.title?.trim()) {
+            let autoCoverUrl: string | undefined;
             try {
               const foundCover = await findOfficialCover(parsed.title, parsed.console || '');
               if (foundCover) autoCoverUrl = foundCover;
@@ -1795,8 +1799,9 @@ Si tu n'es pas certain à 100% du jeu précis pour ce code-barres, réponds {"co
             return res.json({
               found: true,
               source: 'gemini-google-grounding',
+              sources: groundingSources,
               game: {
-                title: parsed.title,
+                title: parsed.title.trim(),
                 console: parsed.console || 'Autre',
                 releaseYear: parsed.releaseYear || undefined,
                 publisher: parsed.publisher || undefined,
@@ -1805,7 +1810,7 @@ Si tu n'es pas certain à 100% du jeu précis pour ce code-barres, réponds {"co
                 synopsis: parsed.synopsis || undefined,
                 estimatedValue: extractNumericValue(parsed.estimatedValue, guessEstimatedValue(parsed.title, parsed.console || 'Autre')),
                 barcode: cleanCode,
-                confidence: 'high',
+                confidence: parsed.confidence === 'high' ? 'high' : 'medium',
                 coverUrl: autoCoverUrl || undefined,
               }
             });
@@ -1816,6 +1821,9 @@ Si tu n'es pas certain à 100% du jeu précis pour ce code-barres, réponds {"co
       }
     }
 
+    // 4. Free barcode databases / multi-source web fallback.
+    // Ces sources ne passent qu'après Gemini + Google Search afin qu'un résultat
+    // isolé ou mal catégorisé ne puisse plus écraser une identification Google.
     // 6. Code not yet found on the web -> Provide direct Google Search link and clean state
     const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanCode)}`;
     return res.json({
