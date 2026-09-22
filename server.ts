@@ -116,34 +116,6 @@ async function generateGeminiJson(ai: GoogleGenAI, prompt: string, timeoutMs: nu
   throw lastErr || new Error('Aucun modèle Gemini disponible actuellement');
 }
 
-// Silent startup probe: check if Gemini API is available on this environment
-(async () => {
-  try {
-    const ai = getAi();
-    if (ai) {
-      for (const model of ['gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest']) {
-        try {
-          await withTimeout(
-            ai.models.generateContent({
-              model,
-              contents: 'ping',
-            }),
-            3000,
-            'timeout'
-          );
-          geminiPermanentlyDisabled = false;
-          geminiDisabledUntil = 0;
-          return; // Success!
-        } catch {
-          // Try next
-        }
-      }
-    }
-  } catch (err: any) {
-    markGeminiFailure(err);
-  }
-})();
-
 function extractNumericValue(val: any, fallback: number): number {
   if (typeof val === 'number' && !isNaN(val) && val >= 0) return Math.round(val);
   if (typeof val === 'string') {
