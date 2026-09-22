@@ -491,71 +491,9 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         return;
       }
 
-      // Si le serveur n'a rien trouvé mais que l'utilisateur a configuré sa clé Gemini, tenter un secours direct avec Google Search Grounding
-      if (!data.found && hasStoredGeminiApiKey()) {
-        try {
-          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques.
-Effectue une recherche Google pour le code-barres EAN/UPC suivant d'un jeu vidéo console : "${cleanCode}".
-Lis les résultats de recherche Google en direct et identifie le jeu vidéo officiel correspondant à ce code.
-Réponds IMPÉRATIVEMENT avec un JSON strict :
-{
-  "title": "titre officiel du jeu",
-  "console": "console (ex: Nintendo Switch, PlayStation 5, PlayStation 4, Xbox One, Xbox Series X|S, etc.)",
-  "releaseYear": 2020,
-  "publisher": "éditeur",
-  "genre": "genre en français",
-  "synopsis": "résumé en 1 phrase",
-  "estimatedValue": 15
-}`;
-          const directData = await callDirectGeminiJson(directPrompt, userKey, true);
-          if (directData && directData.title) {
-            applyGameDetails({ ...directData, barcode: cleanCode });
-            setLookupMessage({
-              type: 'success',
-              text: `Jeu identifié via recherche Google en tâche de fond : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
-            });
-            setIsSearching(false);
-            setActiveTab('manual');
-            return;
-          }
-        } catch {
-          // ignore
-        }
-      }
-    } catch {
-      // Fallback secours direct navigateur si le serveur est inaccessible
-      if (hasStoredGeminiApiKey()) {
-        try {
-          const directPrompt = `Tu es un expert mondial en jeux vidéo physiques.
-Effectue une recherche Google pour le code-barres EAN/UPC suivant d'un jeu vidéo console : "${cleanCode}".
-Lis les résultats de recherche Google en direct et identifie le jeu vidéo officiel correspondant à ce code.
-Réponds IMPÉRATIVEMENT avec un JSON strict :
-{
-  "title": "titre officiel du jeu",
-  "console": "console (ex: Nintendo Switch, PlayStation 5, PlayStation 4, Xbox One, Xbox Series X|S, etc.)",
-  "releaseYear": 2020,
-  "publisher": "éditeur",
-  "genre": "genre en français",
-  "synopsis": "résumé en 1 phrase",
-  "estimatedValue": 15
-}`;
-          const fallbackKey = getStoredGeminiApiKey();
-          const directData = await callDirectGeminiJson(directPrompt, fallbackKey, true);
-          if (directData && directData.title) {
-            applyGameDetails({ ...directData, barcode: cleanCode });
-            setLookupMessage({
-              type: 'success',
-              text: `Jeu identifié via recherche Google en tâche de fond : "${directData.title}" (${directData.console || 'Jeu vidéo'})`,
-            });
-            setIsSearching(false);
-            setActiveTab('manual');
-            return;
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
+      // Aucun secours Gemini côté navigateur : le serveur est l'unique source
+      // d'identification d'un code-barres. Cela évite qu'une réponse IA
+      // différente remplace un consensus web déterministe.
 
     // Aucun jeu trouvé via la recherche web en direct : on n'utilise aucune base interne
     setLookupMessage({
