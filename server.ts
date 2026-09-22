@@ -1,15 +1,11 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import { BARCODE_CATALOG } from './src/data/barcodeCatalog';
 // Aucune base de données interne : toutes les recherches s'effectuent en direct sur le web
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
@@ -130,7 +126,7 @@ function extractNumericValue(val: any, fallback: number): number {
 
 // Clean barcode string
 function normalizeBarcode(code: string): string {
-  const cleaned = code.replace(/\D/g, '').trim();
+  const cleaned = code.replace(/\D/g, '');
   // Reject dummy barcodes composed of identical repeated digits (e.g. 0000000000000)
   if (/^(\d)\1+$/.test(cleaned) && cleaned.length >= 6) {
     return '';
