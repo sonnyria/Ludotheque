@@ -1439,78 +1439,136 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     }
 
 
-    // 3. PRIMARY WEB IDENTIFICATION: Gemini + Google Search Grounding
-    // Gemini utilise Google Search en temps réel. Un résultat n'est accepté que si
-    // la réponse est appuyée par plusieurs sources web distinctes.
+    // 3. PRIMARY WEB IDENTIFICATION: exact barcode web evidence first.
+    // Gemini may enrich/validate the result, but it is never allowed to replace
+    // an exact barcode candidate with an unrelated title.
+    let exactWebResult: Awaited<ReturnType<typeof searchBarcodeOnline>> = null;
+    try {
+      exactWebResult = await withTimeout(
+        searchBarcodeOnline(cleanCode),
+        9000,
+        'Timeout recherche web code-barres'
+      );
+    } catch {
+      exactWebResult = null;
+    }
+
     const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
+
+    if (exactWebResult?.title) {
+      // The web lookup has searched the exact EAN/UPC across several sources.
+      // Gemini can enrich/verify it, but its title is locked to the web candidate.
+      let enriched: any = null;
+
+      if (isGeminiAvailable(customApiKey)) {
+        const ai = getAi(customApiKey);
+        if (ai) {
+          try {
+            const validationPrompt = [
+              'Vérifie le produit physique correspondant EXACTEMENT au code-barres EAN/UPC "' + cleanCode + '".',
+              '',
+              'Une recherche web directe sur ce code a trouvé ce candidat :',
+              'Titre : "' + exactWebResult.title + '"',
+              'Console : "' + (exactWebResult.console || 'Autre') + '"',
+              '',
+              'Utilise Google Search et vérifie que ce titre correspond bien à CE code-barres exact.',
+              'IMPORTANT : ne remplace jamais ce candidat par un autre jeu. Le code exact doit être explicitement associé au produit.',
+              'Si tu ne peux pas confirmer cette association, réponds confirmed=false.',
+              '',
+              'Réponds EXCLUSIVEMENT avec ce JSON :',
+              '{"confirmed":true,"title":"' + exactWebResult.title + '","console":"console exacte","releaseYear":2020,"publisher":"éditeur","developer":"développeur","genre":"genre principal en français","estimatedValue":15}'
+            ].join('\n');
+
+            for (const model of GEMINI_MODELS.slice(0, 3)) {
+              try {
+                const response = await withTimeout(
+                  ai.models.generateContent({
+                    model,
+                    contents: validationPrompt,
+                    config: { tools: [{ googleSearch: {} }] },
+                  }),
+                  6500,
+                  `Timeout validation Google Search Grounding ${model}`
+                );
+
+                const text = response.text || '';
+                const cleaned = text.replace(/\\`\\`\\`(?:json)?/gi, '').replace(/\\`\\`\\`/g, '').trim();
+                const match = cleaned.match(/(\{[\s\S]*\})/);
+                if (!match) continue;
+                const candidate = JSON.parse(match[0]);
+                const sameTitle = typeof candidate?.title === 'string' && candidate.title.trim().toLowerCase() === exactWebResult.title.trim().toLowerCase();
+                if (candidate?.confirmed === true && sameTitle) {
+                  enriched = candidate;
+                  break;
+                }
+              } catch {
+                // Try next Gemini model; deterministic web candidate remains available.
+              }
+            }
+          } catch (aiErr: any) {
+            markGeminiFailure(aiErr, Boolean(customApiKey));
+          }
+        }
+      }
+
+      let autoCoverUrl: string | undefined;
+      try {
+        const foundCover = await findOfficialCover(exactWebResult.title, enriched?.console || exactWebResult.console || '');
+        if (foundCover) autoCoverUrl = foundCover;
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: enriched ? 'barcode-web-verified' : 'barcode-web-exact',
+        game: {
+          title: exactWebResult.title.trim(),
+          console: enriched?.console || exactWebResult.console || 'Autre',
+          releaseYear: enriched?.releaseYear || exactWebResult.releaseYear || undefined,
+          publisher: enriched?.publisher || exactWebResult.publisher || undefined,
+          developer: enriched?.developer || exactWebResult.developer || undefined,
+          genre: enriched?.genre || exactWebResult.genre || guessGameGenre(exactWebResult.title),
+          synopsis: enriched?.synopsis || undefined,
+          estimatedValue: extractNumericValue(enriched?.estimatedValue, guessEstimatedValue(exactWebResult.title, enriched?.console || exactWebResult.console || 'Autre')),
+          barcode: cleanCode,
+          confidence: enriched ? 'high' : 'medium',
+          coverUrl: autoCoverUrl || undefined,
+        },
+      });
+    }
+
+    // No deterministic web candidate: Gemini is a last resort.
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
       if (ai) {
         try {
           let parsed: any = null;
           let groundingSources: Array<{ title: string; url: string }> = [];
-
-          const searchPrompt = `Identifie EXACTEMENT le jeu vidéo physique correspondant au code-barres EAN/UPC "${cleanCode}".
-
-Utilise obligatoirement Google Search et recherche le code exact.
-Analyse plusieurs résultats et privilégie ceux qui associent explicitement ce code à un produit : boutiques de jeux vidéo, bases spécialisées, fiches éditeur/distributeur et résultats Google placés parmi les premiers résultats.
-
-Ne devine jamais. Ne confonds pas une autre édition, région, plateforme ou un autre jeu de la même série.
-Si les sources sont insuffisantes ou contradictoires, utilise "low".
-
-Réponds EXCLUSIVEMENT avec ce JSON :
-{
-  "title": "titre officiel exact",
-  "console": "console exacte",
-  "releaseYear": 2020,
-  "publisher": "éditeur",
-  "developer": "développeur",
-  "genre": "genre principal en français",
-  "estimatedValue": 15,
-  "confidence": "high|medium|low"
-}
-
-Utilise "high" seulement si plusieurs résultats indépendants concordent sur le même titre et la même édition/console, ou si une source très fiable relie explicitement le code-barres au produit.`;
+          const searchPrompt = [
+            'Identifie EXACTEMENT le jeu vidéo physique correspondant au code-barres EAN/UPC "' + cleanCode + '".',
+            'Utilise obligatoirement Google Search et recherche le code exact.',
+            'Le code-barres exact doit être explicitement associé au produit par les sources. Ne devine jamais.',
+            'Si les sources sont insuffisantes ou contradictoires, utilise confidence=low.',
+            '',
+            'Réponds EXCLUSIVEMENT avec ce JSON :',
+            '{"title":"titre officiel exact","console":"console exacte","releaseYear":2020,"publisher":"éditeur","developer":"développeur","genre":"genre principal en français","estimatedValue":15,"confidence":"high|medium|low"}'
+          ].join('\n');
 
           for (const model of GEMINI_MODELS.slice(0, 3)) {
             try {
-              const response = await withTimeout(
-                ai.models.generateContent({
-                  model,
-                  contents: searchPrompt,
-                  config: { tools: [{ googleSearch: {} }] },
-                }),
-                7500,
-                `Timeout Google Search Grounding ${model}`
-              );
-
+              const response = await withTimeout(ai.models.generateContent({ model, contents: searchPrompt, config: { tools: [{ googleSearch: {} }] } }), 7500, `Timeout Google Search Grounding ${model}`);
               const text = response.text || '';
-              const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+              const cleaned = text.replace(/\\`\\`\\`(?:json)?/gi, '').replace(/\\`\\`\\`/g, '').trim();
               const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
               if (!match) continue;
-
               const candidate = JSON.parse(match[0]);
               const metadata = (response as any).candidates?.[0]?.groundingMetadata;
               const chunks = Array.isArray(metadata?.groundingChunks) ? metadata.groundingChunks : [];
-
-              groundingSources = chunks
-                .map((chunk: any) => chunk?.web)
-                .filter((web: any) => web?.uri)
-                .map((web: any) => ({
-                  title: String(web.title || '').trim(),
-                  url: String(web.uri),
-                }))
-                .filter((source: { title: string; url: string }, index: number, arr: Array<{ title: string; url: string }>) =>
-                  arr.findIndex(item => item.url === source.url) === index
-                )
-                .slice(0, 8);
-
-              if (candidate?.title?.trim() && candidate.confidence !== 'low' && groundingSources.length >= 2) {
-                parsed = candidate;
-                break;
-              }
+              groundingSources = chunks.map((chunk: any) => chunk?.web).filter((web: any) => web?.uri).map((web: any) => ({ title: String(web.title || '').trim(), url: String(web.uri) })).filter((source, index, arr) => arr.findIndex(item => item.url === source.url) === index).slice(0, 8);
+              if (candidate?.title?.trim() && candidate.confidence === 'high' && groundingSources.length >= 2) { parsed = candidate; break; }
             } catch {
-              // Essayer le modèle Gemini suivant.
+              // Try next Gemini model.
             }
           }
 
@@ -1522,7 +1580,6 @@ Utilise "high" seulement si plusieurs résultats indépendants concordent sur le
             } catch {
               // ignore
             }
-
             return res.json({
               found: true,
               source: 'gemini-google-grounding',
@@ -1535,12 +1592,9 @@ Utilise "high" seulement si plusieurs résultats indépendants concordent sur le
                 developer: parsed.developer || undefined,
                 genre: parsed.genre || guessGameGenre(parsed.title),
                 synopsis: parsed.synopsis || undefined,
-                estimatedValue: extractNumericValue(
-                  parsed.estimatedValue,
-                  guessEstimatedValue(parsed.title, parsed.console || 'Autre')
-                ),
+                estimatedValue: extractNumericValue(parsed.estimatedValue, guessEstimatedValue(parsed.title, parsed.console || 'Autre')),
                 barcode: cleanCode,
-                confidence: parsed.confidence === 'high' ? 'high' : 'medium',
+                confidence: 'high',
                 coverUrl: autoCoverUrl || undefined,
               },
             });
