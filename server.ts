@@ -548,12 +548,6 @@ async function searchGoogleBarcode(cleanCode: string): Promise<{
 
 // Online barcode lookup via multi-engine live web queries (Bing, DuckDuckGo, OpenProductsFacts)
 async function searchBarcodeOnline(cleanCode: string): Promise<{
-  const googleResult = await searchGoogleBarcode(cleanCode);
-  if (googleResult?.title) {
-    return googleResult;
-  }
-
-
   title: string;
   console: string;
   releaseYear?: number;
@@ -562,6 +556,10 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   genre?: string;
   rawText?: string;
 } | null> {
+  const googleResult = await searchGoogleBarcode(cleanCode);
+  if (googleResult?.title) {
+    return googleResult;
+  }
   if (!cleanCode || cleanCode.length < 6) return null;
 
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -1607,6 +1605,55 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
           confidence: 'medium'
         }
       });
+    }
+
+    // 3b. Free barcode API fallback (no key required): BarcodeFinder
+    // Useful when a barcode database has the exact product record but search-engine scraping misses it.
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const apiRes = await fetch(`https://api.barcodefinder.info/barcode/${encodeURIComponent(cleanCode)}`, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Ludotheque/1.0' },
+      });
+      clearTimeout(timeout);
+
+      if (apiRes.ok) {
+        const data: any = await apiRes.json();
+        const apiTitle = String(data?.title || data?.product_name || '').trim();
+        const apiCategory = String(data?.category || '').trim();
+        const apiBrand = String(data?.brand || '').trim();
+        const gameContext = `${apiTitle} ${apiCategory} ${apiBrand}`;
+
+        if (
+          apiTitle &&
+          /(?:video game|jeu vidéo|game|playstation|xbox|nintendo|switch|sega|atari|pc gaming)/i.test(gameContext)
+        ) {
+          let autoCover: string | undefined;
+          try {
+            const fc = await findOfficialCover(apiTitle);
+            if (fc) autoCover = fc;
+          } catch {
+            // ignore
+          }
+
+          return res.json({
+            found: true,
+            source: 'barcodefinder_api',
+            game: {
+              title: apiTitle,
+              console: 'Autre',
+              publisher: apiBrand || undefined,
+              genre: guessGameGenre(apiTitle),
+              barcode: cleanCode,
+              confidence: 'medium',
+              coverUrl: autoCover || data?.images?.[0] || data?.image || undefined,
+            }
+          });
+        }
+      }
+    } catch {
+      // Continue to the web/Gemini fallbacks.
     }
 
     // 4. Automated background web search across online barcode databases (UPCitemdb, VGCollect, Bing, Buycott, DuckDuckGo)
