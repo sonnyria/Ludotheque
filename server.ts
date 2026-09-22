@@ -441,7 +441,7 @@ function guessEstimatedValue(title: string = '', consoleName: string = '', rawTe
 }
 
 // Online barcode lookup via multi-engine live web queries (Bing, DuckDuckGo, OpenProductsFacts)
-async function searchBarcodeOnline(cleanCode: string): Promise<{
+async function searchBarcodeOnline(cleanCode: string, adjudicatorAi?: GoogleGenAI | null): Promise<{
   title: string;
   console: string;
   releaseYear?: number;
@@ -933,7 +933,62 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   if (bestCandidate.score <= 0 && detectedConsole === 'Autre') return null;
   if (bestCandidate.score < -20) return null;
 
-  const bestTitle = bestCandidate.title;
+  let bestTitle = bestCandidate.title;
+
+  // Gemini is a second evidence layer. It may only choose among titles
+  // already found by the exact-barcode web search.
+  if (adjudicatorAi && cleanCandidates.length > 1) {
+    try {
+      const uniqueCandidates = Array.from(new Map(
+        cleanCandidates.map(candidate => {
+          const key = normalizeCandidateTitle(candidate.title);
+          return [key, {
+            title: candidate.title,
+            weight: weightedFrequency.get(key) || 0,
+            occurrences: occurrenceCount.get(key) || 0,
+          }];
+        })
+      ).values()).slice(0, 8);
+
+      const adjudicationPrompt = [
+        'Identifie le jeu vidéo physique correspondant EXACTEMENT au code-barres "' + cleanCode + '".',
+        'Effectue une recherche Google sur le code-barres exact.',
+        'Voici les candidats issus de recherches web indépendantes :',
+        JSON.stringify(uniqueCandidates),
+        '',
+        'Choisis UNIQUEMENT un titre présent dans cette liste.',
+        'Privilégie le titre cité par plusieurs sources et les résultats Google les mieux classés.',
+        'Si les résultats Google sont contradictoires, réponds confidence="low".',
+        '',
+        'Réponds uniquement en JSON : {"title":"un titre exact de la liste","confidence":"high|medium|low"}'
+      ].join('\n');
+
+      const response = await withTimeout(
+        adjudicatorAi.models.generateContent({
+          model: GEMINI_MODELS[0],
+          contents: adjudicationPrompt,
+          config: { tools: [{ googleSearch: {} }] },
+        }),
+        5500,
+        'Timeout adjudication Google Search'
+      );
+
+      const text = response.text || '';
+      const match = text.match(/(\{[\s\S]*\})/);
+      if (match) {
+        const decision = JSON.parse(match[0]);
+        const chosen = typeof decision?.title === 'string' ? decision.title.trim() : '';
+        const allowed = uniqueCandidates.find(candidate =>
+          normalizeCandidateTitle(candidate.title) === normalizeCandidateTitle(chosen)
+        );
+        if (allowed && decision?.confidence !== 'low') {
+          bestTitle = allowed.title;
+        }
+      }
+    } catch {
+      // Weighted deterministic consensus remains the fallback.
+    }
+  }
 
   return {
     title: bestTitle,
@@ -1517,21 +1572,21 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     }
 
 
+    const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
+
     // 3. PRIMARY WEB IDENTIFICATION: exact barcode web evidence first.
-    // Gemini may enrich/validate the result, but it is never allowed to replace
-    // an exact barcode candidate with an unrelated title.
+    // Gemini may adjudicate candidates, but only among titles already found
+    // for this exact barcode.
     let exactWebResult: Awaited<ReturnType<typeof searchBarcodeOnline>> = null;
     try {
       exactWebResult = await withTimeout(
-        searchBarcodeOnline(cleanCode),
+        searchBarcodeOnline(cleanCode, getAi(customApiKey)),
         9000,
         'Timeout recherche web code-barres'
       );
     } catch {
       exactWebResult = null;
     }
-
-    const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
 
     if (exactWebResult?.title) {
       // The web lookup has searched the exact EAN/UPC across several sources.
