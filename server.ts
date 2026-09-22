@@ -282,6 +282,8 @@ const VERIFIED_BARCODES: Record<string, {
   '045496733223': { title: 'Pokémon Version Rubis', console: 'Game Boy / Advance', releaseYear: 2002, publisher: 'Nintendo', developer: 'Game Freak', genre: 'RPG', estimatedValue: 50 },
   '045496733230': { title: 'Pokémon Version Saphir', console: 'Game Boy / Advance', releaseYear: 2002, publisher: 'Nintendo', developer: 'Game Freak', genre: 'RPG', estimatedValue: 50 },
   '045496733247': { title: 'Pokémon Version Émeraude', console: 'Game Boy / Advance', releaseYear: 2004, publisher: 'Nintendo', developer: 'Game Freak', genre: 'RPG', estimatedValue: 90 },
+  '5035225121617': { title: 'Star Wars Battlefront II', console: 'Xbox One', releaseYear: 2017, publisher: 'Electronic Arts', developer: 'DICE', genre: 'Tir / FPS', estimatedValue: 12 },
+
 };
 
 // Deterministic barcode lookup: Checks verified physical games catalog without random scrapers
@@ -879,9 +881,34 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     return null;
   }
 
-  // Sort candidates by gaming score first, then frequency
-  cleanCandidates.sort((a, b) => b.score - a.score);
-  const bestCandidate = cleanCandidates[0];
+  // A barcode result is only accepted when the same title is independently
+  // observed by at least two search results. This prevents a single noisy
+  // marketplace/search hit from becoming the identified game.
+  const normalizeCandidateTitle = (title: string) =>
+    title.toLowerCase()
+      .replace(/[^a-z0-9àâçéèêëîïôûùüÿñæœ]+/gi, ' ')
+      .replace(/\b(ii|2)\b/gi, '2')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const frequency = new Map<string, number>();
+  for (const candidate of cleanCandidates) {
+    const key = normalizeCandidateTitle(candidate.title);
+    frequency.set(key, (frequency.get(key) || 0) + 1);
+  }
+
+  cleanCandidates.sort((a, b) => {
+    const fa = frequency.get(normalizeCandidateTitle(a.title)) || 0;
+    const fb = frequency.get(normalizeCandidateTitle(b.title)) || 0;
+    return (fb * 100 + b.score) - (fa * 100 + a.score);
+  });
+
+  const bestCandidate = cleanCandidates.find(candidate =>
+    (frequency.get(normalizeCandidateTitle(candidate.title)) || 0) >= 2
+  );
+
+  // Do not guess when the exact barcode has only produced one uncorroborated title.
+  if (!bestCandidate) return null;
   if (bestCandidate.score <= 0 && detectedConsole === 'Autre') return null;
   if (bestCandidate.score < -20) return null;
 
