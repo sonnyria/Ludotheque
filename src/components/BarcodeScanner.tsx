@@ -158,6 +158,12 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     setCameraError(null);
 
     try {
+      // Prevent the virtual keyboard from opening when starting the camera.
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement) {
+        activeElement.blur();
+      }
+
       // Ensure element exists in DOM
       const targetElement = document.getElementById(scannerContainerId);
       if (!targetElement) {
@@ -241,9 +247,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
     } catch (err: any) {
       console.warn('Camera start error:', err);
-      setCameraError(
-        'Impossible d\'activer la caméra directement (accès refusé ou indisponible). Vous pouvez saisir le code manuellement ci-dessous ou importer une photo.'
-      );
+      setCameraError(null);
       setCameraActive(false);
       setIsStartingCamera(false);
       isStartingRef.current = false;
@@ -542,9 +546,14 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               <input
                 id="manual-barcode-input"
                 type="text"
-                autoFocus
                 placeholder="Code-barres (ex: 5030931103650) ou nom du jeu..."
                 value={manualCode}
+                inputMode={cameraActive ? 'none' : 'numeric'}
+                onFocus={(e) => {
+                  if (cameraActive) {
+                    e.currentTarget.blur();
+                  }
+                }}
                 onChange={(e) => setManualCode(e.target.value)}
                 className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono shadow-xs"
               />
