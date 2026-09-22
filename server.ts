@@ -1547,6 +1547,118 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     }
 
 
+    // 3. PRIMARY WEB IDENTIFICATION: Gemini + Google Search Grounding
+    // Gemini utilise Google Search en temps réel. Un résultat n'est accepté que si
+    // la réponse est appuyée par plusieurs sources web distinctes.
+    const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
+    if (isGeminiAvailable(customApiKey)) {
+      const ai = getAi(customApiKey);
+      if (ai) {
+        try {
+          let parsed: any = null;
+          let groundingSources: Array<{ title: string; url: string }> = [];
+
+          const searchPrompt = `Identifie EXACTEMENT le jeu vidéo physique correspondant au code-barres EAN/UPC "${cleanCode}".
+
+Utilise obligatoirement Google Search et recherche le code exact.
+Analyse plusieurs résultats et privilégie ceux qui associent explicitement ce code à un produit : boutiques de jeux vidéo, bases spécialisées, fiches éditeur/distributeur et résultats Google placés parmi les premiers résultats.
+
+Ne devine jamais. Ne confonds pas une autre édition, région, plateforme ou un autre jeu de la même série.
+Si les sources sont insuffisantes ou contradictoires, utilise "low".
+
+Réponds EXCLUSIVEMENT avec ce JSON :
+{
+  "title": "titre officiel exact",
+  "console": "console exacte",
+  "releaseYear": 2020,
+  "publisher": "éditeur",
+  "developer": "développeur",
+  "genre": "genre principal en français",
+  "estimatedValue": 15,
+  "confidence": "high|medium|low"
+}
+
+Utilise "high" seulement si plusieurs résultats indépendants concordent sur le même titre et la même édition/console, ou si une source très fiable relie explicitement le code-barres au produit.`;
+
+          for (const model of GEMINI_MODELS.slice(0, 3)) {
+            try {
+              const response = await withTimeout(
+                ai.models.generateContent({
+                  model,
+                  contents: searchPrompt,
+                  config: { tools: [{ googleSearch: {} }] },
+                }),
+                7500,
+                `Timeout Google Search Grounding ${model}`
+              );
+
+              const text = response.text || '';
+              const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+              const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+              if (!match) continue;
+
+              const candidate = JSON.parse(match[0]);
+              const metadata = (response as any).candidates?.[0]?.groundingMetadata;
+              const chunks = Array.isArray(metadata?.groundingChunks) ? metadata.groundingChunks : [];
+
+              groundingSources = chunks
+                .map((chunk: any) => chunk?.web)
+                .filter((web: any) => web?.uri)
+                .map((web: any) => ({
+                  title: String(web.title || '').trim(),
+                  url: String(web.uri),
+                }))
+                .filter((source: { title: string; url: string }, index: number, arr: Array<{ title: string; url: string }>) =>
+                  arr.findIndex(item => item.url === source.url) === index
+                )
+                .slice(0, 8);
+
+              if (candidate?.title?.trim() && candidate.confidence !== 'low' && groundingSources.length >= 2) {
+                parsed = candidate;
+                break;
+              }
+            } catch {
+              // Essayer le modèle Gemini suivant.
+            }
+          }
+
+          if (parsed?.title?.trim()) {
+            let autoCoverUrl: string | undefined;
+            try {
+              const foundCover = await findOfficialCover(parsed.title, parsed.console || '');
+              if (foundCover) autoCoverUrl = foundCover;
+            } catch {
+              // ignore
+            }
+
+            return res.json({
+              found: true,
+              source: 'gemini-google-grounding',
+              sources: groundingSources,
+              game: {
+                title: parsed.title.trim(),
+                console: parsed.console || 'Autre',
+                releaseYear: parsed.releaseYear || undefined,
+                publisher: parsed.publisher || undefined,
+                developer: parsed.developer || undefined,
+                genre: parsed.genre || guessGameGenre(parsed.title),
+                synopsis: parsed.synopsis || undefined,
+                estimatedValue: extractNumericValue(
+                  parsed.estimatedValue,
+                  guessEstimatedValue(parsed.title, parsed.console || 'Autre')
+                ),
+                barcode: cleanCode,
+                confidence: parsed.confidence === 'high' ? 'high' : 'medium',
+                coverUrl: autoCoverUrl || undefined,
+              },
+            });
+          }
+        } catch (aiErr: any) {
+          markGeminiFailure(aiErr, Boolean(customApiKey));
+        }
+      }
+    }
+
     // 3. OpenProductsFacts - ONLY if verified to be a video game / console item
     let opfTitle: string | null = null;
     let opfBrand: string | null = null;
