@@ -463,6 +463,12 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
 
   const rawTitles: string[] = [];
   const rawSnippets: string[] = [];
+  const rawTitleWeights: number[] = [];
+  const addRawTitle = (title: string, weight = 1) => {
+    if (!title || !title.trim()) return;
+    rawTitles.push(title);
+    rawTitleWeights.push(weight);
+  };
 
   const unpadded = cleanCode.replace(/^0+/, '');
 
@@ -484,7 +490,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
           if (m) {
             const val = m[1].replace(/<[^>]+>/g, '').trim();
             if (val && !/not found|404|error/i.test(val)) {
-              rawTitles.push(val);
+              addRawTitle(val, 4);
               rawSnippets.push(`UPCitemdb: ${val}`);
             }
           }
@@ -510,7 +516,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
           const platforms = Array.from(html.matchAll(/<div[^>]*class="item-platform"[^>]*>([\s\S]*?)<\/div>/gi)).map(x => x[1].replace(/<[^>]+>/g, '').trim());
           if (matches.length > 0) {
             const fullTitle = platforms[0] ? `${matches[0]} [${platforms[0]}]` : matches[0];
-            rawTitles.push(fullTitle);
+            addRawTitle(fullTitle, 4);
             rawSnippets.push(`VGCollect: ${fullTitle}`);
           }
         }
@@ -533,7 +539,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
           const html = await ddgRes.text();
           for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
             const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-            if (t) rawTitles.push(t);
+            if (t) addRawTitle(t);
           }
           for (const m of html.matchAll(/<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
             const s = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
@@ -559,7 +565,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
           const html = await ddgRes.text();
           for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
             const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-            if (t) rawTitles.push(t);
+            if (t) addRawTitle(t);
           }
           for (const m of html.matchAll(/<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
             const s = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
@@ -587,7 +593,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
           if (h2) {
             const val = h2[1].replace(/<[^>]+>/g, '').trim();
             if (val && !/error|not found|page not found/i.test(val)) {
-              rawTitles.push(val);
+              addRawTitle(val, 4);
               rawSnippets.push(`Buycott UPC: ${val}`);
             }
           }
@@ -614,7 +620,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
             const h = a.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/i);
             if (h) {
               const t = h[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-              if (t) rawTitles.push(t);
+              if (t) addRawTitle(t);
             }
             const p = a.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
             if (p) {
@@ -649,7 +655,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
               const titleMatch = html.match(/<h1[^>]*id="product_name"[^>]*>([\s\S]*?)<\/h1>/i);
               const gameTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : urlParts[1].split('?')[0].replace(/-/g, ' ');
               if (gameTitle) {
-                rawTitles.push(gameTitle);
+                addRawTitle(gameTitle, 4);
                 rawSnippets.push(`PriceCharting: ${gameTitle} [${consoleSlug}]`);
                 break;
               }
@@ -677,7 +683,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
             const p = opfData.product;
             const name = p.product_name || p.product_name_fr || p.product_name_en;
             if (name && name.trim()) {
-              rawTitles.push(name.trim());
+              addRawTitle(name.trim(), 3);
               if (p.brands) rawSnippets.push(`Editeur: ${p.brands}`);
             }
           }
@@ -704,7 +710,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
         const html = await ddgResUnpad.text();
         for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
           const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-          if (t) rawTitles.push(t);
+          if (t) addRawTitle(t);
         }
       }
     } catch {
@@ -891,24 +897,39 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
       .replace(/\s+/g, ' ')
       .trim();
 
-  const frequency = new Map<string, number>();
-  for (const candidate of cleanCandidates) {
+  // Weighted consensus:
+  // - direct barcode/product databases count strongly;
+  // - generic web results count normally;
+  // - repeated occurrences of the same normalized title reinforce the candidate.
+  // This prevents one noisy result from replacing a title supported by several sources.
+  const weightedFrequency = new Map<string, number>();
+  const occurrenceCount = new Map<string, number>();
+  for (let i = 0; i < cleanCandidates.length; i++) {
+    const candidate = cleanCandidates[i];
     const key = normalizeCandidateTitle(candidate.title);
-    frequency.set(key, (frequency.get(key) || 0) + 1);
+    const rawIndex = rawTitles.indexOf(candidate.title);
+    const weight = rawIndex >= 0 ? (rawTitleWeights[rawIndex] || 1) : 1;
+    weightedFrequency.set(key, (weightedFrequency.get(key) || 0) + weight);
+    occurrenceCount.set(key, (occurrenceCount.get(key) || 0) + 1);
   }
 
   cleanCandidates.sort((a, b) => {
-    const fa = frequency.get(normalizeCandidateTitle(a.title)) || 0;
-    const fb = frequency.get(normalizeCandidateTitle(b.title)) || 0;
-    return (fb * 100 + b.score) - (fa * 100 + a.score);
+    const ka = normalizeCandidateTitle(a.title);
+    const kb = normalizeCandidateTitle(b.title);
+    const wa = weightedFrequency.get(ka) || 0;
+    const wb = weightedFrequency.get(kb) || 0;
+    const oa = occurrenceCount.get(ka) || 0;
+    const ob = occurrenceCount.get(kb) || 0;
+    return (wb * 100 + ob * 10 + b.score) - (wa * 100 + oa * 10 + a.score);
   });
 
-  const bestCandidate = cleanCandidates.find(candidate =>
-    (frequency.get(normalizeCandidateTitle(candidate.title)) || 0) >= 2
-  );
+  const bestCandidate = cleanCandidates[0];
+  const bestKey = bestCandidate ? normalizeCandidateTitle(bestCandidate.title) : '';
+  const bestWeight = bestKey ? (weightedFrequency.get(bestKey) || 0) : 0;
+  const bestOccurrences = bestKey ? (occurrenceCount.get(bestKey) || 0) : 0;
 
-  // Do not guess when the exact barcode has only produced one uncorroborated title.
-  if (!bestCandidate) return null;
+  // Require real corroboration. A single isolated result is never enough.
+  if (!bestCandidate || bestOccurrences < 2 || bestWeight < 3) return null;
   if (bestCandidate.score <= 0 && detectedConsole === 'Autre') return null;
   if (bestCandidate.score < -20) return null;
 
