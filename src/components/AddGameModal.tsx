@@ -494,6 +494,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       // Aucun secours Gemini côté navigateur : le serveur est l'unique source
       // d'identification d'un code-barres. Cela évite qu'une réponse IA
       // différente remplace un consensus web déterministe.
+    } catch (error) {
+      clearTimeout(timeoutId);
+      // La recherche web a échoué : on reste sur la saisie manuelle
+      // plutôt que de laisser le spinner actif indéfiniment.
+    }
 
     // Aucun jeu trouvé via la recherche web en direct : on n'utilise aucune base interne
     setLookupMessage({
