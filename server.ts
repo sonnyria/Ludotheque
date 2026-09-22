@@ -1546,6 +1546,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       }
     }
 
+
     // 3. OpenProductsFacts - ONLY if verified to be a video game / console item
     let opfTitle: string | null = null;
     let opfBrand: string | null = null;
@@ -1652,6 +1653,61 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       }
     } catch {
       // Continue to the web/Gemini fallbacks.
+    }
+
+    // 4. Automated background web search across online barcode databases (UPCitemdb, VGCollect, Bing, Buycott, DuckDuckGo)
+    // Fast, free, official product databases without relying on AI quota
+    const onlineResult = await searchBarcodeOnline(cleanCode);
+    if (onlineResult && onlineResult.title) {
+      let autoCoverUrl: string | undefined = undefined;
+      try {
+        const foundCover = await findOfficialCover(onlineResult.title, onlineResult.console || '');
+        if (foundCover) autoCoverUrl = foundCover;
+      } catch {
+        // ignore
+      }
+
+      // Enrich with Wikipedia and free web metadata if available
+      let enrichedTitle = onlineResult.title;
+      let enrichedConsole = onlineResult.console || 'Autre';
+      let enrichedYear = onlineResult.releaseYear;
+      let enrichedPublisher = onlineResult.publisher;
+      let enrichedDeveloper = onlineResult.developer;
+      let enrichedGenre = onlineResult.genre || guessGameGenre(enrichedTitle);
+      let enrichedSynopsis: string | undefined = undefined;
+
+      try {
+        const metaResults = await searchWikipediaGames(enrichedTitle, enrichedConsole);
+        if (metaResults.length > 0) {
+          const m = metaResults[0];
+          if (!enrichedYear && m.releaseYear) enrichedYear = m.releaseYear;
+          if (!enrichedPublisher && m.publisher) enrichedPublisher = m.publisher;
+          if (!enrichedDeveloper && m.developer) enrichedDeveloper = m.developer;
+          if (!enrichedSynopsis && m.synopsis) enrichedSynopsis = m.synopsis;
+          if (m.genre && (enrichedGenre === 'Action / Aventure' || enrichedGenre === 'Action-Aventure')) enrichedGenre = m.genre;
+          if (!autoCoverUrl && m.coverUrl) autoCoverUrl = m.coverUrl;
+        }
+      } catch {
+        // ignore
+      }
+
+      return res.json({
+        found: true,
+        source: 'web_search',
+        game: {
+          title: enrichedTitle,
+          console: enrichedConsole,
+          releaseYear: enrichedYear || undefined,
+          publisher: enrichedPublisher || undefined,
+          developer: enrichedDeveloper || undefined,
+          genre: enrichedGenre,
+          synopsis: enrichedSynopsis || undefined,
+          estimatedValue: guessEstimatedValue(enrichedTitle, enrichedConsole),
+          barcode: cleanCode,
+          confidence: 'high',
+          coverUrl: autoCoverUrl || undefined,
+        }
+      });
     }
 
     // 4. Automated background web search across online barcode databases (UPCitemdb, VGCollect, Bing, Buycott, DuckDuckGo)
