@@ -87,6 +87,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const [titleSuggestions, setTitleSuggestions] = useState<any[]>([]);
   const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
   const lastSelectedTitleRef = useRef<string | null>(null);
+  const barcodeLookupInFlightRef = useRef(false);
   const suggestionsBoxRef = useRef<HTMLDivElement>(null);
   const [inlineGeminiKey, setInlineGeminiKey] = useState('');
   const [showInlineKeyInput, setShowInlineKeyInput] = useState(false);
@@ -371,6 +372,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
 
   const handleBarcodeDetected = async (code: string) => {
     if (!code) return;
+    // Scanner callbacks can fire more than once for the same physical barcode.
+    // Never launch overlapping network lookups: they can keep the UI in a perpetual loading state.
+    if (barcodeLookupInFlightRef.current) return;
+    barcodeLookupInFlightRef.current = true;
     const cleanCode = code.trim();
     setBarcode(cleanCode);
     setIsSearching(true);
@@ -448,7 +453,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     // 3. Live search across online databases & web
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 18000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       const userKey = getStoredGeminiApiKey();
 
       const res = await fetch('/api/games/lookup-barcode', {
@@ -487,6 +492,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
           text: `Jeu identifié en direct sur le web : "${data.game.title}" (${data.game.console}) • Cote occasion actualisée : ${freshCote} €`,
         });
         setIsSearching(false);
+        barcodeLookupInFlightRef.current = false;
         setActiveTab('manual');
         return;
       }
@@ -496,8 +502,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       // différente remplace un consensus web déterministe.
     } catch (error) {
       clearTimeout(timeoutId);
-      // La recherche web a échoué : on reste sur la saisie manuelle
-      // plutôt que de laisser le spinner actif indéfiniment.
+      // Timeout, réseau indisponible ou serveur en erreur : le spinner doit toujours s'arrêter.
+    } finally {
+      barcodeLookupInFlightRef.current = false;
+      setIsSearching(false);
     }
 
     // Aucun jeu trouvé via la recherche web en direct : on n'utilise aucune base interne
@@ -507,6 +515,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     });
     setActiveTab('manual');
     setIsSearching(false);
+    barcodeLookupInFlightRef.current = false;
   };
 
   const handleAiEnrich = async (overrideTitle?: string, overrideConsole?: string) => {
