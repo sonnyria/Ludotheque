@@ -429,6 +429,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         text: `Jeu déjà en stock : "${localMatch.title}" (${localMatch.console}) • Cote occasion actualisée à ${freshCote} € (${localMatch.quantity || 1} exemplaire${(localMatch.quantity || 1) > 1 ? 's' : ''})`,
       });
       setIsSearching(false);
+      barcodeLookupInFlightRef.current = false;
       setActiveTab('manual');
       return;
     }
@@ -446,6 +447,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
         text: `Jeu authentifié avec succès : "${catalogMatch.title}" (${catalogMatch.console}) • Cote estimée : ${freshCote} €`,
       });
       setIsSearching(false);
+      barcodeLookupInFlightRef.current = false;
       setActiveTab('manual');
       return;
     }
