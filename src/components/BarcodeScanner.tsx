@@ -97,6 +97,14 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const scannerContainerId = 'interactive-barcode-viewport';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isStartingRef = useRef(false);
+  const lastScannedRef = useRef<string | null>(null);
+  const onBarcodeDetectedRef = useRef(onBarcodeDetected);
+
+  // Keep the latest parent callback without making the camera lifecycle
+  // depend on the parent's render cycle.
+  useEffect(() => {
+    onBarcodeDetectedRef.current = onBarcodeDetected;
+  }, [onBarcodeDetected]);
 
   // Play audio chime when barcode is scanned
   const playBeep = () => {
@@ -207,7 +215,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         },
         (decodedText) => {
           const clean = decodedText.replace(/\D/g, '');
-          if (clean && clean !== lastScanned) {
+          if (clean && clean !== lastScannedRef.current) {
+            lastScannedRef.current = clean;
             setLastScanned(clean);
             setDetectedCode(clean);
             playBeep();
@@ -216,7 +225,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             // Stop camera and notify parent with slight delay for visual confirmation
             setTimeout(() => {
               stopCamera();
-              onBarcodeDetected(clean);
+              onBarcodeDetectedRef.current(clean);
             }, 350);
           }
         },
@@ -252,7 +261,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       setIsStartingCamera(false);
       isStartingRef.current = false;
     }
-  }, [lastScanned, onBarcodeDetected, stopCamera]);
+  }, [stopCamera]);
 
   // Auto-start camera when requested
   useEffect(() => {
