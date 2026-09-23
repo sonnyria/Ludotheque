@@ -93,9 +93,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     }
   }, [initialCode]);
 
-  // The green "Code détecté" overlay belongs to the lookup request.
-  // Once the parent finishes the lookup, remove it; otherwise it can stay
-  // visible forever because stopping the camera does not clear this state.
+  // The scan result is a short-lived UI state owned by this component.
+  // The parent controls the actual lookup with isLoading.
   useEffect(() => {
     if (!isLoading) {
       setDetectedCode(null);
@@ -107,6 +106,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isStartingRef = useRef(false);
   const lastScannedRef = useRef<string | null>(null);
+  const scanLockedRef = useRef(false);
   const onBarcodeDetectedRef = useRef(onBarcodeDetected);
 
   // Keep the latest parent callback without making the camera lifecycle
@@ -166,6 +166,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     setIsTorchOn(false);
     setTorchSupported(false);
     isStartingRef.current = false;
+    scanLockedRef.current = false;
   }, []);
 
   const startCamera = useCallback(async (mode: 'environment' | 'user' = 'environment') => {
@@ -173,6 +174,9 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     isStartingRef.current = true;
     setIsStartingCamera(true);
     setCameraError(null);
+    setDetectedCode(null);
+    lastScannedRef.current = null;
+    scanLockedRef.current = false;
 
     try {
       // Prevent the virtual keyboard from opening when starting the camera.
@@ -224,19 +228,22 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         },
         (decodedText) => {
           const clean = decodedText.replace(/\D/g, '');
-          if (clean && clean !== lastScannedRef.current) {
-            lastScannedRef.current = clean;
-            setLastScanned(clean);
-            setDetectedCode(clean);
-            playBeep();
-            triggerHaptic();
+          if (!clean || scanLockedRef.current) return;
 
-            // Stop camera and notify parent with slight delay for visual confirmation
-            setTimeout(() => {
-              stopCamera();
-              onBarcodeDetectedRef.current(clean);
-            }, 350);
-          }
+          // Lock immediately. The camera remains open while the parent performs
+          // the lookup, so the user always sees the lookup state instead of a
+          // blank/closed scanner.
+          scanLockedRef.current = true;
+          lastScannedRef.current = clean;
+          setLastScanned(clean);
+          setDetectedCode(clean);
+          playBeep();
+          triggerHaptic();
+
+          // Do not stop/clear the camera here. Stopping the scanner immediately
+          // after detection was causing the result overlay to disappear before
+          // the parent's loading state could render.
+          onBarcodeDetectedRef.current(clean);
         },
         () => {
           // Normal frame misses while searching
