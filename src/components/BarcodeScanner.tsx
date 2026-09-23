@@ -93,6 +93,15 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     }
   }, [initialCode]);
 
+  // The green "Code détecté" overlay belongs to the lookup request.
+  // Once the parent finishes the lookup, remove it; otherwise it can stay
+  // visible forever because stopping the camera does not clear this state.
+  useEffect(() => {
+    if (!isLoading) {
+      setDetectedCode(null);
+    }
+  }, [isLoading]);
+
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'interactive-barcode-viewport';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
