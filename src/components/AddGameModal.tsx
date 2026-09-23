@@ -453,9 +453,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     }
 
     // 3. Live search across online databases & web
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      timeoutId = setTimeout(() => controller.abort(), 10000);
       const userKey = getStoredGeminiApiKey();
 
       const res = await fetch('/api/games/lookup-barcode', {
@@ -503,7 +504,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       // d'identification d'un code-barres. Cela évite qu'une réponse IA
       // différente remplace un consensus web déterministe.
     } catch (error) {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
       // Timeout, réseau indisponible ou serveur en erreur : le spinner doit toujours s'arrêter.
     } finally {
       barcodeLookupInFlightRef.current = false;
