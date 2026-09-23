@@ -1536,7 +1536,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       try {
         const foundCover = await withTimeout(
           findOfficialCover(exactWebResult.title, exactWebResult.console || ''),
-          1500,
+          1000,
           'Timeout jaquette code-barres'
         );
         if (foundCover) autoCoverUrl = foundCover;
@@ -1562,6 +1562,56 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       });
     }
 
+    // FALLBACK RAPIDE: BarcodeFinder avant Gemini. (no key required): BarcodeFinder
+    // Useful when a barcode database has the exact product record but search-engine scraping misses it.
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const apiRes = await fetch(`https://www.barcodefinder.info/v1/product/${encodeURIComponent(cleanCode)}`, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Ludotheque/1.0' },
+      });
+      clearTimeout(timeout);
+
+      if (apiRes.ok) {
+        const data: any = await apiRes.json();
+        const apiTitle = String(data?.title || data?.product_name || '').trim();
+        const apiCategory = String(data?.category || '').trim();
+        const apiBrand = String(data?.brand || '').trim();
+        const gameContext = `${apiTitle} ${apiCategory} ${apiBrand}`;
+
+        if (
+          apiTitle &&
+          /(?:video game|jeu vidéo|playstation|xbox|nintendo|switch|sega|atari|pc gaming)/i.test(gameContext)
+        ) {
+          let autoCover: string | undefined;
+          try {
+            const fc = await withTimeout(findOfficialCover(apiTitle), 1000, 'Timeout jaquette BarcodeFinder');
+            if (fc) autoCover = fc;
+          } catch {
+            // ignore
+          }
+
+          return res.json({
+            found: true,
+            source: 'barcodefinder_api',
+            game: {
+              title: apiTitle,
+              console: 'Autre',
+              publisher: apiBrand || undefined,
+              genre: guessGameGenre(apiTitle),
+              barcode: cleanCode,
+              confidence: 'medium',
+              coverUrl: autoCover || data?.images?.[0] || data?.image || undefined,
+            }
+          });
+        }
+      }
+    } catch {
+      // Continue to the web/Gemini fallbacks.
+    }
+
+
     // LAST RESORT: one Gemini Google Search pass only when deterministic sources fail.
     if (isGeminiAvailable(customApiKey)) {
       const ai = getAi(customApiKey);
@@ -1583,7 +1633,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
               contents: searchPrompt,
               config: { tools: [{ googleSearch: {} }] },
             }),
-            6500,
+            5500,
             'Timeout Google Search Grounding'
           );
 
@@ -1606,7 +1656,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
               try {
                 const foundCover = await withTimeout(
                   findOfficialCover(parsed.title, parsed.console || ''),
-                  1500,
+                  1000,
                   'Timeout jaquette Gemini'
                 );
                 if (foundCover) autoCoverUrl = foundCover;
@@ -1640,56 +1690,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       }
     }
 
-    // 4. Free barcode API fallback (no key required): BarcodeFinder
-    // Useful when a barcode database has the exact product record but search-engine scraping misses it.
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      const apiRes = await fetch(`https://www.barcodefinder.info/v1/product/${encodeURIComponent(cleanCode)}`, {
-        signal: controller.signal,
-        headers: { 'User-Agent': 'Ludotheque/1.0' },
-      });
-      clearTimeout(timeout);
-
-      if (apiRes.ok) {
-        const data: any = await apiRes.json();
-        const apiTitle = String(data?.title || data?.product_name || '').trim();
-        const apiCategory = String(data?.category || '').trim();
-        const apiBrand = String(data?.brand || '').trim();
-        const gameContext = `${apiTitle} ${apiCategory} ${apiBrand}`;
-
-        if (
-          apiTitle &&
-          /(?:video game|jeu vidéo|playstation|xbox|nintendo|switch|sega|atari|pc gaming)/i.test(gameContext)
-        ) {
-          let autoCover: string | undefined;
-          try {
-            const fc = await findOfficialCover(apiTitle);
-            if (fc) autoCover = fc;
-          } catch {
-            // ignore
-          }
-
-          return res.json({
-            found: true,
-            source: 'barcodefinder_api',
-            game: {
-              title: apiTitle,
-              console: 'Autre',
-              publisher: apiBrand || undefined,
-              genre: guessGameGenre(apiTitle),
-              barcode: cleanCode,
-              confidence: 'medium',
-              coverUrl: autoCover || data?.images?.[0] || data?.image || undefined,
-            }
-          });
-        }
-      }
-    } catch {
-      // Continue to the web/Gemini fallbacks.
-    }
-
-    // 5. Code not yet found on the web -> Provide direct Google Search link and clean state
+    // FINAL. Code not yet found on the web -> Provide direct Google Search link and clean state
     const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanCode)}`;
     return res.json({
       found: false,
