@@ -1316,7 +1316,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
 
               {/* Console selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-retro">
-                <div
+                <div>
                   <label htmlFor="game-console" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
                     CONSOLE / PLATEFORME *
                   </label>
