@@ -10,6 +10,13 @@ export function getSafeCoverUrl(url?: string): string {
   const trimmed = url.trim();
   if (!trimmed) return '';
 
+  // Version the proxy URL to bypass old cached SVG placeholders.
+  if (trimmed.startsWith('/api/covers/proxy')) {
+    const url = new URL(trimmed, 'https://local.invalid');
+    url.searchParams.set('v', '2');
+    return url.pathname + url.search;
+  }
+
   // Already routed through proxy or data URL or local asset
   if (
     trimmed.startsWith('/api/covers/proxy') ||
@@ -21,7 +28,7 @@ export function getSafeCoverUrl(url?: string): string {
 
   // Route external HTTP/HTTPS images through our robust proxy
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return `/api/covers/proxy?url=${encodeURIComponent(trimmed)}`;
+    return `/api/covers/proxy?url=${encodeURIComponent(trimmed)}&v=2`;
   }
 
   return trimmed;
@@ -38,3 +45,4 @@ export function handleImageError(e: React.SyntheticEvent<HTMLImageElement, Event
   }
   target.style.display = 'none';
 }
+
