@@ -848,6 +848,21 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
           </button>
         </div>
 
+        {/* Keep the cover visible beside the identified title, without scrolling the form. */}
+        {!isSearching && title && (coverUrl || isSearchingCover) && (
+          <div className="mx-4 sm:mx-6 mt-3 flex items-center gap-4 rounded-xl border border-slate-700 bg-slate-900 p-3">
+            <div className="w-20 h-28 shrink-0 flex items-center justify-center overflow-hidden rounded-lg bg-slate-950">
+              {coverUrl ? <img src={getSafeCoverUrl(coverUrl)} alt={`Jaquette de ${title}`} className="h-full w-full object-contain" referrerPolicy="no-referrer" />
+                : <Loader2 className="h-7 w-7 animate-spin text-amber-400" />}
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-slate-100">{title}</p>
+              <p className="text-xs text-slate-400">{consoleName === 'Autre' ? customConsole : consoleName}</p>
+              {isSearchingCover && <p className="mt-2 text-xs text-amber-300">Recherche de la jaquette…</p>}
+            </div>
+          </div>
+        )}
+
         {/* Searching Indicator Banner */}
         {isSearching && (
           <div className="mx-4 sm:mx-6 mt-3 p-3 rounded-xl text-xs flex items-center gap-3 border bg-amber-950/80 text-amber-200 border-amber-500/60 font-medium shrink-0 font-retro animate-pulse shadow-md">

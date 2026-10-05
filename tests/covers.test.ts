@@ -15,6 +15,33 @@ test('Steam must not substitute a different numbered game', async () => {
   assert.equal((await search('FIFA 22', 'PC')).bestCover, null);
 });
 
+test('an abbreviated scanned title matches the full Steam title of the same numbered game', async () => {
+  const search = searchWith((async (url: string) => {
+    if (url.includes('storesearch')) return Response.json({items:[{id:292030,name:'The Witcher 3: Wild Hunt — Remastered'}]});
+    if (url.includes('steamstatic.com')) return new Response(new Uint8Array([255,216,255,217]),{headers:{'content-type':'image/jpeg'}});
+    return new Response('',{status:404});
+  }) as typeof fetch);
+  assert.ok((await search('/ -the Witcher 3','Xbox One')).bestCover);
+});
+
+test('a soundtrack is not accepted as the cover of its parent game', async () => {
+  const search = searchWith((async (url: string) => {
+    if (url.includes('storesearch')) return Response.json({items:[{id:1239320,name:'The Witcher 3: Wild Hunt — Remastered Soundtrack'}]});
+    if (url.includes('steamstatic.com')) return new Response(new Uint8Array([255,216,255,217]),{headers:{'content-type':'image/jpeg'}});
+    return new Response('',{status:404});
+  }) as typeof fetch);
+  assert.equal((await search('The Witcher 3','Xbox One')).bestCover, null);
+});
+
+test('an unnumbered series title is not expanded to a different game', async () => {
+  const search = searchWith((async (url: string) => {
+    if (url.includes('storesearch')) return Response.json({items:[{id:100,name:'Resident Evil Village'}]});
+    if (url.includes('steamstatic.com')) return new Response(new Uint8Array([255,216,255,217]),{headers:{'content-type':'image/jpeg'}});
+    return new Response('',{status:404});
+  }) as typeof fetch);
+  assert.equal((await search('Resident Evil','Xbox One')).bestCover, null);
+});
+
 test('an unavailable image is not advertised as a found cover', async () => {
   const search = searchWith((async (url: string) => url.includes('storesearch') ? Response.json({items:[{id:100,name:'Adventure'}]}) : new Response('',{status:404})) as typeof fetch);
   assert.equal((await search('Adventure', 'PC')).bestCover, null);
