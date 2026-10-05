@@ -901,7 +901,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     s = s.replace(/\s*VideoGames\s*$/i, '');
     s = s.replace(/\s*Game\s*$/i, '');
     s = s.replace(/\s*Rockstar\s*UK.*$/i, '');
-    s = s.replace(/^[\s\-–:|,.]+/, '').replace(/[\s\-–:|,\[\].]+$/, '').trim();
+    s = s.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[\s\-–:|,\[\].]+$/, '').trim();
     s = s.replace(/\s{2,}/g, ' ');
 
     // Normalize common roman numeral titles
@@ -997,13 +997,24 @@ export interface CoverOption {
 async function findOfficialCovers(title: string, consoleName: string = '', preferredCover: string = ''): Promise<{ bestCover: string | null; covers: CoverOption[] }> {
   if (!title || !title.trim()) return { bestCover: null, covers: [] };
 
-  const cleanTitle = title.replace(/\s*\(.*?\)/g, '').replace(/\s*:\s*/g, ': ').trim();
+  const cleanTitle = title.replace(/^[^\p{L}\p{N}]+/u, '').replace(/\s*\(.*?\)/g, '').replace(/\s*:\s*/g, ': ').trim();
   const normalizeTitle = (value: string) => value.toLowerCase().normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').replace(/[™®]/g, '')
     .replace(/\biii\b/g, '3').replace(/\bii\b/g, '2').replace(/\biv\b/g, '4')
     .replace(/\([^)]*\b(?:video game|jeu video|201[0-9]|202[0-9])\b[^)]*\)/g, '')
-    .replace(/[^a-z0-9]+/g, ' ').trim();
-  const titleMatches = (value: string) => normalizeTitle(value) === normalizeTitle(cleanTitle);
+    .replace(/[^a-z0-9]+/g, ' ').trim().replace(/^the\s+/, '')
+    .replace(/\s+(?:remastered|remaster|complete edition|definitive edition|game of the year edition|goty edition)$/, '');
+  const titleMatches = (value: string) => {
+    if (/\b(?:soundtrack|season pass|expansion|dlc)\b/i.test(value)) return false;
+    const candidate = normalizeTitle(value);
+    const requested = normalizeTitle(cleanTitle);
+    if (candidate === requested) return true;
+    // Retailers often shorten a title. Keep its sequel number and word order exact.
+    const numbers = (text: string) => (text.match(/\b\d+\b/g) || []).join(',');
+    const words = requested.split(' ');
+    return words.length >= 2 && /\b\d+$/.test(requested) && numbers(candidate) === numbers(requested) &&
+      candidate.startsWith(requested + ' ') && candidate.split(' ').length - words.length <= 3;
+  };
   const fetchImage = async (url: string) => {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(1800), headers: { 'User-Agent': 'Ludotheque/1.0', 'Accept': 'image/*' } });
@@ -1109,6 +1120,25 @@ async function findOfficialCovers(title: string, consoleName: string = '', prefe
     }
   };
 
+  const searchWikiTitle = async () => {
+    try {
+      const params = new URLSearchParams({action:'query', generator:'search', gsrsearch:cleanTitle,
+        gsrnamespace:'0', gsrlimit:'5', prop:'pageimages', pilicense:'any', pithumbsize:'600', format:'json'});
+      const response = await fetch(`https://en.wikipedia.org/w/api.php?${params}`, {
+        signal: AbortSignal.timeout(1800), headers: {'User-Agent':'Ludotheque/1.0'}
+      });
+      if (!response.ok) return;
+      const data: any = await response.json();
+      const pages: any[] = Object.values(data?.query?.pages || {});
+      for (const page of pages.sort((a,b) => (a.index || 0) - (b.index || 0))) {
+        if (page.thumbnail?.source && titleMatches(page.title || '')) {
+          addCover(page.thumbnail.source, undefined, page.title, 'Wikipedia');
+          break;
+        }
+      }
+    } catch { /* Other sources can still supply the cover. */ }
+  };
+
   // 3. Steam official store assets
   const searchSteam = async () => {
     try {
@@ -1164,6 +1194,7 @@ async function findOfficialCovers(title: string, consoleName: string = '', prefe
     searchDDG(),
     searchWikiDirect('en.wikipedia.org'),
     searchWikiDirect('fr.wikipedia.org'),
+    searchWikiTitle(),
     searchSteam()
   ]);
 
@@ -1494,7 +1525,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     if (cleanCode === '5035225121617') {
       let autoCover: string | undefined = undefined;
       try {
-        const fc = await withTimeout(findOfficialCover('Star Wars Battlefront II', 'Xbox One'), 1000, 'Timeout jaquette');
+        const fc = await withTimeout(findOfficialCover('Star Wars Battlefront II', 'Xbox One'), 5000, 'Timeout jaquette');
         if (fc) autoCover = fc;
       } catch {
         // ignore
@@ -1523,7 +1554,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     if (verified) {
       let autoCover: string | undefined = undefined;
       try {
-        const fc = await withTimeout(findOfficialCover(verified.title, verified.console), 1000, 'Timeout jaquette');
+        const fc = await withTimeout(findOfficialCover(verified.title, verified.console), 5000, 'Timeout jaquette');
         if (fc) autoCover = fc;
       } catch {
         // ignore
@@ -1603,7 +1634,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
       try {
         const foundCover = await withTimeout(
           findOfficialCover(exactWebResult.title, exactWebResult.console || ''),
-          1000,
+          5000,
           'Timeout jaquette code-barres'
         );
         if (foundCover) autoCoverUrl = foundCover;
@@ -1653,7 +1684,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
         ) {
           let autoCover: string | undefined;
           try {
-            const fc = await withTimeout(findOfficialCover(apiTitle), 1000, 'Timeout jaquette BarcodeFinder');
+            const fc = await withTimeout(findOfficialCover(apiTitle), 5000, 'Timeout jaquette BarcodeFinder');
             if (fc) autoCover = fc;
           } catch {
             // ignore
@@ -1726,7 +1757,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
               try {
                 const foundCover = await withTimeout(
                   findOfficialCover(parsed.title, parsed.console || ''),
-                  1000,
+                  5000,
                   'Timeout jaquette Gemini'
                 );
                 if (foundCover) autoCoverUrl = foundCover;
