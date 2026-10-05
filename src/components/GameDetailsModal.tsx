@@ -630,6 +630,11 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                     </span>
                   </div>
 
+                  {game.marketQuote?.comparisons?.map(ref => <p key={ref.sourceUrl} className="text-xs text-amber-200 mt-2">
+                    <a href={ref.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">Autre référence : {ref.source} ({ref.market}) · {ref.estimatedValue} €</a>
+                    <br />{ref.note}. Les références ne sont pas moyennées.
+                  </p>)}
+
                   <div className="flex flex-wrap items-center gap-2 pt-1 font-pixel text-[9px]">
                     <button type="button" onClick={consultPrice} disabled={isConsultingPrice || game.condition === 'dematerialise'} className="rounded px-2 py-1 bg-emerald-900 text-emerald-200 disabled:opacity-50">{isConsultingPrice ? 'Consultation…' : 'Consulter la cote'}</button>
                     {priceMessage && <span className="font-retro text-slate-300">{priceMessage}</span>}

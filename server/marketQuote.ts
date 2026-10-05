@@ -1,4 +1,4 @@
-import type {GameCondition, MarketQuote} from '../src/types.js';
+import type {GameCondition, MarketQuote, MarketReference} from '../src/types.js';
 
 const PLATFORMS: Record<string, string> = {
  'Nintendo Switch':'pal-nintendo-switch',
@@ -14,7 +14,7 @@ function text(html: string): string {
 }
 function normalize(title: string): string {
  const result=text(title).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
- .replace(/[^a-z0-9]+/g,' ').trim().replace(/^the /,'');
+ .replace(/\s*&\s*/g,' and ').replace(/[^a-z0-9]+/g,' ').trim().replace(/^the /,'');
  return result === 'witcher 3' ? 'witcher 3 wild hunt' : result;
 }
 export function parsePriceChartingQuote(html: string, url: string, title: string, consoleName: string, condition: GameCondition): MarketQuote | null {
@@ -37,7 +37,7 @@ export function parsePriceChartingQuote(html: string, url: string, title: string
  if (!Number.isFinite(rate) || rate<=0 || !Number.isFinite(usd) || usd<=0) return null;
  return {estimatedValue:Math.round(usd*rate*100)/100,currency:'EUR',source:'PriceCharting (PAL)',sourceUrl:url,checkedAt:new Date().toISOString(),market:'PAL international',condition};
 }
-export async function lookupMarketQuote(title: string, consoleName: string, condition: GameCondition, fetcher: typeof fetch=fetch): Promise<MarketQuote|null> {
+async function lookupPriceChartingQuote(title: string, consoleName: string, condition: GameCondition, fetcher: typeof fetch=fetch): Promise<MarketQuote|null> {
  const platform=PLATFORMS[consoleName];
  if (!platform || condition==='dematerialise') return null;
  const read=async(url:string)=>{
@@ -46,7 +46,7 @@ export async function lookupMarketQuote(title: string, consoleName: string, cond
   return {html:await response.text(),url:response.url||url};
  };
  try {
-  const query=new URLSearchParams({q:`${title} ${consoleName}`,type:'videogames'});
+  const query=new URLSearchParams({q:`${normalize(title)} ${consoleName}`,type:'videogames'});
   const search=await read(`https://www.pricecharting.com/search-products?${query}`);
   const direct=parsePriceChartingQuote(search.html,search.url,title,consoleName,condition);
   if(direct) return direct;
@@ -58,4 +58,37 @@ export async function lookupMarketQuote(title: string, consoleName: string, cond
   }
  } catch { /* A blocked or ambiguous source must never become an invented quote. */ }
  return null;
+}
+
+// Verified product links can supplement the PAL quote without asserting identical editions or states.
+const FRENCH_REFERENCE_LINKS: Record<string, string> = {
+ 'PlayStation 2|simpsons hit and run': 'https://www.voxgaming.fr/catalog/ps2/the-simpsons-hit-run-8969.php?ed=22461',
+};
+export function parseVoxReference(html: string, url: string, title: string, consoleName: string): MarketReference | null {
+ if(consoleName !== 'PlayStation 2' || FRENCH_REFERENCE_LINKS[`${consoleName}|${normalize(title)}`] !== url) return null;
+ const heading=html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
+ if(!heading || normalize(heading.replace(/<small\b[\s\S]*?<\/small>/gi,'')) !== normalize(title)) return null;
+ const attestation=html.match(/<span\b[^>]*data-quote-loose=["'][^"']+["'][^>]*>/i)?.[0];
+ if(!attestation) return null;
+ const attr=(key:string)=>text(attestation.match(new RegExp(`${key}=["']([^"']*)["']`))?.[1] || '');
+ if(normalize(attr('data-title')) !== normalize(title) || attr('data-platform') !== 'PS2') return null;
+ const amount=Number(attr('data-quote-loose'));
+ const displayed=Number(html.match(/<span\b[^>]*class=["']price["'][^>]*>\s*<img\b[^>]*src=["']https:\/\/www\.voxgaming\.fr\/img\/quote\/(\d+(?:\.\d+)?)\.png["']/i)?.[1]);
+ if(!Number.isFinite(amount) || amount<=0 || displayed!==amount) return null;
+ return {estimatedValue:amount, source:'Voxgaming', sourceUrl:url, checkedAt:new Date().toISOString(), market:'France',
+   note:`${attr('data-fiability') || 'Statut non précisé'} · état/édition exacts non confirmés pour la comparaison`};
+}
+async function lookupFrenchReference(title: string, consoleName: string, condition: GameCondition, fetcher: typeof fetch): Promise<MarketReference|null> {
+ const url=FRENCH_REFERENCE_LINKS[`${consoleName}|${normalize(title)}`];
+ if(!url || condition !== 'complet') return null;
+ try {
+   const response=await fetcher(url,{signal:AbortSignal.timeout(4000),headers:{'User-Agent':'Mozilla/5.0'}});
+   if(!response.ok) return null;
+   return parseVoxReference(await response.text(),url,title,consoleName);
+ } catch {return null;}
+}
+export async function lookupMarketQuote(title: string, consoleName: string, condition: GameCondition, fetcher: typeof fetch=fetch): Promise<MarketQuote|null> {
+ const [quote, reference]=await Promise.all([lookupPriceChartingQuote(title,consoleName,condition,fetcher),lookupFrenchReference(title,consoleName,condition,fetcher)]);
+ if(!quote) return null;
+ return reference ? {...quote, comparisons:[reference]} : quote;
 }
