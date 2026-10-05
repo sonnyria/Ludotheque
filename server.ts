@@ -3,11 +3,13 @@ import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import { BARCODE_CATALOG } from './src/data/barcodeCatalog';
+import { hasExactProductIdentifier, verifyBarcodeSources } from './server/barcodeEvidence';
 // Aucune base de données interne : toutes les recherches s'effectuent en direct sur le web
 
 dotenv.config();
 
 const app = express();
+export default app;
 const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
@@ -464,10 +466,38 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   const rawTitles: string[] = [];
   const rawSnippets: string[] = [];
   const rawTitleWeights: number[] = [];
-  const addRawTitle = (title: string, weight = 1) => {
-    if (!title || !title.trim()) return;
+  const rawTitleSources: string[] = [];
+  const rawTitleContexts: string[] = [];
+  const codePattern = new RegExp('(?:^|[^0-9])' + cleanCode + '(?:[^0-9]|$)');
+  const isGameContext = (text: string) => /\b(?:video\s*games?|jeu[x]?\s*vid[eé]o|playstation|ps[1-5]|xbox|nintendo|switch|gamecube|wii|snes|nes|sega|atari|game\s*boy|pc\s*(?:gaming|dvd|cd))\b/i.test(text);
+  const addRawTitle = (title: string, weight = 1, source = '', evidence = '', exact = false) => {
+    if (!title?.trim() || !source || (!exact && !codePattern.test(evidence))) return;
+    const context = `${title} ${evidence}`;
+    if (!isGameContext(context)) return;
     rawTitles.push(title);
     rawTitleWeights.push(weight);
+    rawTitleSources.push(source);
+    rawTitleContexts.push(context);
+  };
+  const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+  const ingestDdg = (html: string) => {
+    const links = [...html.matchAll(/<a\b[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)];
+    for (let i = 0; i < links.length; i++) {
+      const link = links[i];
+      const block = html.slice(link.index, links[i + 1]?.index ?? html.length);
+      const snippet = block.match(/<[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div|span)>/i)?.[1] || '';
+      const title = stripHtml(link[1]);
+      const evidence = `${title} ${stripHtml(snippet)}`;
+      if (!codePattern.test(evidence)) continue;
+      try {
+        const href = link[0].match(/href=["']([^"']+)["']/i)?.[1];
+        if (!href) continue;
+        const url = new URL(href.replace(/&amp;/g, '&'), 'https://duckduckgo.com');
+        const target = new URL(url.searchParams.get('uddg') || url.href);
+        if (!/^https?:$/.test(target.protocol) || target.hostname.endsWith('duckduckgo.com')) continue;
+        addRawTitle(title, 1, target.hostname.replace(/^www\./, ''), evidence);
+      } catch { /* Ignore links without an identifiable product source. */ }
+    }
   };
 
   const unpadded = cleanCode.replace(/^0+/, '');
@@ -494,7 +524,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
             const val = String(item?.title || '').trim();
             if (exactMatch && val && !/not found|404|error/i.test(val)) {
               // Weight 10: an exact structured EAN/UPC/GTIN match outranks generic web snippets.
-              addRawTitle(val, 10);
+              addRawTitle(val, 10, 'upcitemdb.com', `${item?.category || ''} ${item?.brand || ''}`, true);
               rawSnippets.push(`UPCitemdb exact: ${val}${item?.brand ? ` | ${item.brand}` : ''}${item?.category ? ` | ${item.category}` : ''}`);
             }
           }
@@ -520,7 +550,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
           const platforms = Array.from(html.matchAll(/<div[^>]*class="item-platform"[^>]*>([\s\S]*?)<\/div>/gi)).map(x => x[1].replace(/<[^>]+>/g, '').trim());
           if (matches.length > 0) {
             const fullTitle = platforms[0] ? `${matches[0]} [${platforms[0]}]` : matches[0];
-            addRawTitle(fullTitle, 4);
+            // Search listing alone is not proof of an exact barcode association.
             rawSnippets.push(`VGCollect: ${fullTitle}`);
           }
         }
@@ -541,14 +571,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
         clearTimeout(timeout);
         if (ddgRes.ok) {
           const html = await ddgRes.text();
-          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
-            const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-            if (t) addRawTitle(t);
-          }
-          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
-            const s = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-            if (s) rawSnippets.push(s);
-          }
+          ingestDdg(html);
         }
       } catch {
         // ignore
@@ -567,14 +590,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
         clearTimeout(timeout);
         if (ddgRes.ok) {
           const html = await ddgRes.text();
-          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
-            const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-            if (t) addRawTitle(t);
-          }
-          for (const m of html.matchAll(/<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
-            const s = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-            if (s) rawSnippets.push(s);
-          }
+          ingestDdg(html);
         }
       } catch {
         // ignore
@@ -597,7 +613,10 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
           if (h2) {
             const val = h2[1].replace(/<[^>]+>/g, '').trim();
             if (val && !/error|not found|page not found/i.test(val)) {
-              addRawTitle(val, 4);
+              const text = stripHtml(html);
+              if (new RegExp('(?:UPC|EAN|GTIN)\\s*:?\\s*' + cleanCode + '(?:[^0-9]|$)', 'i').test(text)) {
+                addRawTitle(val, 10, 'buycott.com', text, true);
+              }
               rawSnippets.push(`Buycott UPC: ${val}`);
             }
           }
@@ -624,7 +643,17 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
             const h = a.match(/<h[23][^>]*>([\s\S]*?)<\/h[23]>/i);
             if (h) {
               const t = h[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-              if (t) addRawTitle(t);
+              const href = h[1].match(/href=["']([^"']+)["']/i)?.[1];
+              try {
+                if (href) {
+                  const link = new URL(href.replace(/&amp;/g, '&'));
+                  const encoded = link.searchParams.get('u');
+                  const target = encoded?.startsWith('a1') ? new URL(Buffer.from(encoded.slice(2), 'base64url').toString()) : link;
+                  if (!target.hostname.endsWith('bing.com')) {
+                    addRawTitle(t, 1, target.hostname.replace(/^www\./, ''), stripHtml(a));
+                  }
+                }
+              } catch { /* Skip search-engine redirects without an identifiable source. */ }
             }
             const p = a.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
             if (p) {
@@ -659,7 +688,10 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
               const titleMatch = html.match(/<h1[^>]*id="product_name"[^>]*>([\s\S]*?)<\/h1>/i);
               const gameTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : urlParts[1].split('?')[0].replace(/-/g, ' ');
               if (gameTitle) {
-                addRawTitle(gameTitle, 4);
+                const text = stripHtml(html);
+                if (new RegExp('(?:UPC|EAN|GTIN)\\s*:?\\s*' + cleanCode + '(?:[^0-9]|$)', 'i').test(text)) {
+                  addRawTitle(`${gameTitle} [${consoleSlug}]`, 10, 'pricecharting.com', `${gameTitle} ${consoleSlug}`, true);
+                }
                 rawSnippets.push(`PriceCharting: ${gameTitle} [${consoleSlug}]`);
                 break;
               }
@@ -687,7 +719,9 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
             const p = opfData.product;
             const name = p.product_name || p.product_name_fr || p.product_name_en;
             if (name && name.trim()) {
-              addRawTitle(name.trim(), 3);
+              if (String(p.code || opfData.code || '').replace(/^0+/, '') === cleanCode.replace(/^0+/, '')) {
+                addRawTitle(name.trim(), 10, 'openproductsfacts.org', `${p.categories || ''} ${p.brands || ''}`, true);
+              }
               if (p.brands) rawSnippets.push(`Editeur: ${p.brands}`);
             }
           }
@@ -712,10 +746,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
       clearTimeout(timeout);
       if (ddgResUnpad.ok) {
         const html = await ddgResUnpad.text();
-        for (const m of html.matchAll(/<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)) {
-          const t = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-          if (t) addRawTitle(t);
-        }
+        ingestDdg(html);
       }
     } catch {
       // ignore
@@ -808,7 +839,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   }
 
   // Extract clean game titles from raw titles
-  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|cologne|eau\s*de|fragrance|deodorant|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking|vinyl|album|audio\s*cd|cassette|3lp|2cd|discogs|record\b|dress|shirt|shoes|jacket|apparel|anniversary\b|tour\b|live\s*in\b|remastered\s*vinyl|youtube|google|wikipedia|facebook|twitter|instagram|reddit|tiktok|vimeo|dailymotion|imdb|linkedin)/i;
+  const nonGameRegex = /(?:phone|caller|fraud|identity|check|number|scam|who\s*is|recherche|inverse|annuaire|forum|mercedes|benz|audi|bmw|car\b|owners|wont\s*open|adult|porn|xxx|xnxx|powerball|lottery|whatsapp|deutsch\s*pr[uü]fung|telc|microsoft\s*community|file\s*explorer|customer\s*service|login|signin|sign\s*in|perfume|cologne|eau\s*de|fragrance|deodorant|lip\s*gloss|protein\s*powder|waterstones|shipping|tracking|vinyl|album|audio\s*cd|cassette|3lp|2cd|discogs|record\b|dress|shirt|shoes|jacket|apparel|tour\b|live\s*in\b|remastered\s*vinyl|youtube|google|wikipedia|facebook|twitter|instagram|reddit|tiktok|vimeo|dailymotion|imdb|linkedin)/i;
 
   function scoreGameCandidate(candidate: string, fullContext: string): number {
     let score = 0;
@@ -842,7 +873,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     return score;
   }
 
-  const cleanCandidates: Array<{ title: string; score: number; weight: number }> = [];
+  const cleanCandidates: Array<{ title: string; score: number; weight: number; source: string; context: string }> = [];
   for (let rawIndex = 0; rawIndex < rawTitles.length; rawIndex++) {
     const t = rawTitles[rawIndex];
     const sourceWeight = rawTitleWeights[rawIndex] || 1;
@@ -878,8 +909,9 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
     if (/^MEGA MAN 11\b/i.test(s)) s = 'Mega Man 11';
 
     if (s.length >= 3 && !nonGameRegex.test(s) && !/^(?:Call Of Duty Ps3|Amazon|Ebay|Good condition|Department|Undergraduate|Finance|Fonctionne|Track a Package)$/i.test(s)) {
-      const score = scoreGameCandidate(t, allTexts.join(' '));
-      cleanCandidates.push({ title: s, score, weight: sourceWeight });
+      const context = rawTitleContexts[rawIndex];
+      const score = scoreGameCandidate(t, context);
+      cleanCandidates.push({ title: s, score, weight: sourceWeight, source: rawTitleSources[rawIndex], context });
     }
   }
 
@@ -903,9 +935,14 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   const weightedFrequency = new Map<string, number>();
   const occurrenceCount = new Map<string, number>();
   const maxSourceWeight = new Map<string, number>();
+  const independentSources = new Map<string, Set<string>>();
 
   for (const candidate of cleanCandidates) {
     const key = normalizeCandidateTitle(candidate.title);
+    const sources = independentSources.get(key) || new Set<string>();
+    if (sources.has(candidate.source)) continue;
+    sources.add(candidate.source);
+    independentSources.set(key, sources);
     weightedFrequency.set(key, (weightedFrequency.get(key) || 0) + candidate.weight);
     occurrenceCount.set(key, (occurrenceCount.get(key) || 0) + 1);
     maxSourceWeight.set(key, Math.max(maxSourceWeight.get(key) || 0, candidate.weight));
@@ -932,8 +969,8 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
   // Exact structured barcode databases are authoritative enough on their own.
   // Generic search-engine titles still need corroboration and gaming context.
   const hasExactStructuredHit = bestSourceWeight >= 10;
-  const hasTrustedDatabaseHit = bestSourceWeight >= 4 && bestCandidate?.score >= 0;
-  const hasCorroboratedWebHit = bestOccurrences >= 2 && bestWeight >= 3 && (hasGamingContext || detectedConsole !== 'Autre');
+  const hasTrustedDatabaseHit = false; // HTML search listings require independent corroboration.
+  const hasCorroboratedWebHit = bestOccurrences >= 2 && bestWeight >= 2 && (hasGamingContext || detectedConsole !== 'Autre');
 
   if (!bestCandidate || (!hasExactStructuredHit && !hasTrustedDatabaseHit && !hasCorroboratedWebHit)) return null;
   if (bestCandidate.score < -20) return null;
@@ -942,9 +979,7 @@ async function searchBarcodeOnline(cleanCode: string): Promise<{
 
   return {
     title: bestTitle,
-    console: detectedConsole,
-    releaseYear: detectedYear,
-    publisher: detectedPublisher,
+    console: consoleKeywords.find(cp => cp.reg.test(bestCandidate.context))?.name || 'Autre',
     genre: guessGameGenre(bestTitle),
     rawText: allTexts.slice(0, 8).join(' | ').slice(0, 600)
   };
@@ -1432,7 +1467,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     if (cleanCode === '5035225121617') {
       let autoCover: string | undefined = undefined;
       try {
-        const fc = await findOfficialCover('Star Wars Battlefront II', 'Xbox One');
+        const fc = await withTimeout(findOfficialCover('Star Wars Battlefront II', 'Xbox One'), 1000, 'Timeout jaquette');
         if (fc) autoCover = fc;
       } catch {
         // ignore
@@ -1461,7 +1496,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
     if (verified) {
       let autoCover: string | undefined = undefined;
       try {
-        const fc = await findOfficialCover(verified.title, verified.console);
+        const fc = await withTimeout(findOfficialCover(verified.title, verified.console), 1000, 'Timeout jaquette');
         if (fc) autoCover = fc;
       } catch {
         // ignore
@@ -1586,7 +1621,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
         const gameContext = `${apiTitle} ${apiCategory} ${apiBrand}`;
 
         if (
-          apiTitle &&
+          apiTitle && hasExactProductIdentifier(cleanCode, data) &&
           /(?:video game|jeu vidéo|playstation|xbox|nintendo|switch|sega|atari|pc gaming)/i.test(gameContext)
         ) {
           let autoCover: string | undefined;
@@ -1630,7 +1665,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
             '',
             'Réponds EXCLUSIVEMENT avec ce JSON :',
             '{"title":"titre officiel exact","console":"console exacte","releaseYear":2020,"publisher":"éditeur","developer":"développeur","genre":"genre principal en français","estimatedValue":15,"confidence":"high|medium|low"}'
-          ].join('\\n');
+          ].join('\n');
 
           const response = await withTimeout(
             ai.models.generateContent({
@@ -1656,7 +1691,10 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
               .filter((source: any, index: number, arr: any[]) => arr.findIndex((item: any) => item.url === source.url) === index)
               .slice(0, 8);
 
-            if (parsed?.title?.trim() && parsed.confidence === 'high' && groundingSources.length >= 2) {
+            const verifiedSources = parsed?.title?.trim() && parsed.confidence === 'high'
+              ? await verifyBarcodeSources(cleanCode, parsed.title, groundingSources, fetch, parsed.console || 'Autre')
+              : [];
+            if (verifiedSources.length >= 2) {
               let autoCoverUrl: string | undefined;
               try {
                 const foundCover = await withTimeout(
@@ -1672,7 +1710,7 @@ app.post('/api/games/lookup-barcode', async (req, res) => {
               return res.json({
                 found: true,
                 source: 'gemini-google-grounding',
-                sources: groundingSources,
+                sources: verifiedSources,
                 game: {
                   title: parsed.title.trim(),
                   console: parsed.console || 'Autre',
@@ -2104,6 +2142,9 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
-  console.error('Failed to start server:', err);
-});
+if (!process.env.VERCEL) {
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+  });
+}
+
