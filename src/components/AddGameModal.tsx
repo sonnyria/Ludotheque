@@ -1641,6 +1641,10 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                       </a>
                     ) : 'Valeur indicative ou saisie manuellement · aucun prix de vente garanti'}
                   </span>
+                  {marketQuote?.comparisons?.map(ref => <p key={ref.sourceUrl} className="text-[11px] text-amber-200 mt-2">
+                    <a href={ref.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">Autre référence : {ref.source} ({ref.market}) · {ref.estimatedValue} €</a>
+                    <br />{ref.note}. Les références ne sont pas moyennées.
+                  </p>)}
                 </div>
 
                 <div>

@@ -29,6 +29,15 @@ export type GameStatus = 'backlog' | 'playing' | 'completed' | 'wishlist';
 
 export type ViewMode = 'list' | 'shelf' | 'table';
 
+export interface MarketReference {
+  estimatedValue: number;
+  source: string;
+  sourceUrl: string;
+  checkedAt: string;
+  market: string;
+  note: string;
+}
+
 export interface MarketQuote {
   estimatedValue: number;
   currency: 'EUR';
@@ -37,6 +46,7 @@ export interface MarketQuote {
   checkedAt: string;
   market: string;
   condition: GameCondition;
+  comparisons?: MarketReference[];
 }
 
 export interface Game {
