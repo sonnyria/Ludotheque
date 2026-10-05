@@ -994,10 +994,35 @@ export interface CoverOption {
 }
 
 // Multi-engine cover search combining DuckDuckGo Images, Wikipedia, Steam & Bing (< 700ms)
-async function findOfficialCovers(title: string, consoleName: string = ''): Promise<{ bestCover: string | null; covers: CoverOption[] }> {
+async function findOfficialCovers(title: string, consoleName: string = '', preferredCover: string = ''): Promise<{ bestCover: string | null; covers: CoverOption[] }> {
   if (!title || !title.trim()) return { bestCover: null, covers: [] };
 
   const cleanTitle = title.replace(/\s*\(.*?\)/g, '').replace(/\s*:\s*/g, ': ').trim();
+  const normalizeTitle = (value: string) => value.toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[™®]/g, '')
+    .replace(/\biii\b/g, '3').replace(/\bii\b/g, '2').replace(/\biv\b/g, '4')
+    .replace(/\([^)]*\b(?:video game|jeu video|201[0-9]|202[0-9])\b[^)]*\)/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+  const titleMatches = (value: string) => normalizeTitle(value) === normalizeTitle(cleanTitle);
+  const fetchImage = async (url: string) => {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(1800), headers: { 'User-Agent': 'Ludotheque/1.0', 'Accept': 'image/*' } });
+      const valid = response.ok && /^image\//i.test(response.headers.get('content-type') || '');
+      if (!valid) { await response.body?.cancel(); return false; }
+      return (await response.arrayBuffer()).byteLength > 0;
+    } catch { return false; }
+  };
+  if (preferredCover) {
+    try {
+      const candidate = preferredCover.startsWith('/api/covers/proxy')
+        ? new URL(preferredCover, 'https://local.invalid').searchParams.get('url') || ''
+        : preferredCover;
+      if (/^https?:\/\//.test(candidate) && !/logo|banner|screenshot/i.test(candidate) && await fetchImage(candidate)) {
+        const url = `/api/covers/proxy?url=${encodeURIComponent(candidate)}`;
+        return {bestCover: url, covers: [{url, rawUrl: candidate, title: cleanTitle, source: 'existing'}]};
+      }
+    } catch { /* Search a replacement when the provided catalogue image is broken. */ }
+  }
   const covers: CoverOption[] = [];
   const seenUrls = new Set<string>();
 
@@ -1025,6 +1050,7 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
     try {
       const q = `${cleanTitle} ${consoleName} jaquette box art`.trim();
       const initRes = await fetch('https://duckduckgo.com/?q=' + encodeURIComponent(q), {
+        signal: AbortSignal.timeout(1800),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
         }
@@ -1033,6 +1059,7 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
       const vqd = html.match(/vqd=["\x27]?([0-9-_]+)/)?.[1];
       if (vqd) {
         const imgRes = await fetch(`https://duckduckgo.com/i.js?l=fr-fr&o=json&q=${encodeURIComponent(q)}&vqd=${vqd}&f=,,,`, {
+          signal: AbortSignal.timeout(1800),
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Referer': 'https://duckduckgo.com/'
@@ -1040,7 +1067,7 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
         });
         const data: any = await imgRes.json();
         for (const item of (data.results || []).slice(0, 10)) {
-          if (item?.image) {
+          if (item?.image && item?.title && normalizeTitle(item.title).includes(normalizeTitle(cleanTitle))) {
             addCover(item.image, item.thumbnail, item.title, 'web');
           }
         }
@@ -1073,8 +1100,7 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
       if (!res.ok) return;
       const data: any = await res.json();
       const pages: any[] = Object.values(data?.query?.pages || {});
-      const best = pages.find(p => p?.thumbnail?.source && /video game|jeu vid/i.test(p.title || '')) ||
-                   pages.find(p => p?.thumbnail?.source);
+      const best = pages.find(p => p?.thumbnail?.source && titleMatches(p.title || ''));
       if (best?.thumbnail?.source) {
         addCover(best.thumbnail.source, best.thumbnail.source, best.title, 'Wikipedia');
       }
@@ -1096,11 +1122,11 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
       const apps = (data?.items || []).slice(0, 3);
       for (const app of apps) {
         if (app?.id && app?.name) {
-          const queryHasDigit = /\b(\d+|ii|iii|iv|v|vi)\b/i.test(cleanTitle);
-          const appHasDigit = /\b([2-9]|\d{2,}|ii|iii|iv|v|vi)\b/i.test(app.name);
-          if (!queryHasDigit && appHasDigit) continue;
-          const cover = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${app.id}/library_600x900.jpg`;
-          addCover(cover, cover, app.name, 'Steam');
+          if (!titleMatches(app.name)) continue;
+          for (const hostPath of ['https://cdn.akamai.steamstatic.com/steam/apps', 'https://shared.fastly.steamstatic.com/store_item_assets/steam/apps']) {
+            const cover = `${hostPath}/${app.id}/library_600x900.jpg`;
+            addCover(cover, undefined, app.name, 'Steam');
+          }
           break;
         }
       }
@@ -1115,6 +1141,7 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
       const q = `${cleanTitle} ${consoleName} jaquette`.trim();
       const bingUrl = `https://www.bing.com/images/search?q=${encodeURIComponent(q)}&first=1`;
       const res = await fetch(bingUrl, {
+        signal: AbortSignal.timeout(1800),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8'
@@ -1123,7 +1150,7 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
       const html = await res.text();
       for (const m of html.matchAll(/murl&quot;:&quot;(https?:\/\/[^&"]+)&quot;/g)) {
         const url = m[1];
-        if (/\.(jpg|jpeg|png|webp)/i.test(url)) {
+        if (/\.(jpg|jpeg|png|webp)/i.test(url) && normalizeTitle(decodeURIComponent(url)).includes(normalizeTitle(cleanTitle))) {
           addCover(url, undefined, cleanTitle, 'Bing');
           if (covers.length >= 6) break;
         }
@@ -1140,10 +1167,6 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
     searchSteam()
   ]);
 
-  if (covers.length === 0) {
-    await searchBing();
-  }
-
   // Prioritize authentic box arts, covers and reputable gaming databases
   covers.sort((a, b) => {
     const score = (c: CoverOption) => {
@@ -1158,8 +1181,29 @@ async function findOfficialCovers(title: string, consoleName: string = ''): Prom
     return score(b) - score(a);
   });
 
-  const bestCover = covers.length > 0 ? covers[0].url : null;
-  return { bestCover, covers };
+  // Check both the original and thumbnail fallback before reporting success.
+  const validation = new Map<string, Promise<boolean>>();
+  const isDownloadable = (url: string) => {
+    if (!validation.has(url)) validation.set(url, fetchImage(url));
+    return validation.get(url)!;
+  };
+  const checkCovers = async () => {
+    const checked = await Promise.all(covers.slice(0, 8).map(async cover => {
+      const valid = await isDownloadable(cover.rawUrl) ||
+        (cover.thumb !== cover.rawUrl && await isDownloadable(cover.thumb || ''));
+      return valid ? cover : null;
+    }));
+    return checked.filter((cover): cover is CoverOption => cover !== null);
+  };
+  let validCovers = await checkCovers();
+  if (!validCovers.length) {
+    // Make room for fallback candidates instead of rechecking the failed first batch.
+    covers.length = 0;
+    await searchBing();
+    validCovers = await checkCovers();
+  }
+  const bestCover = validCovers[0]?.url || null;
+  return { bestCover, covers: validCovers };
 }
 
 async function findOfficialCover(title: string, consoleName: string = ''): Promise<string | null> {
@@ -1352,32 +1396,13 @@ app.get('/api/covers/proxy', async (req, res) => {
   let targetUrl = (req.query.url as string) || '';
   let fallbackUrl = (req.query.fallback as string) || '';
 
-  const original = req.originalUrl || req.url;
-  const urlIdx = original.indexOf('url=');
-  if (urlIdx !== -1) {
-    const queryPart = original.slice(urlIdx + 4);
-    const ampIdx = queryPart.indexOf('&fallback=');
-    if (ampIdx !== -1) {
-      targetUrl = queryPart.slice(0, ampIdx);
-      fallbackUrl = queryPart.slice(ampIdx + 10);
-    } else {
-      targetUrl = queryPart;
-    }
-  }
-
-  // Handle single or double URL encoding
-  const cleanUrl = (u: string) => {
-    try {
-      let dec = decodeURIComponent(u);
-      if (dec.includes('%') && /%[0-9A-Fa-f]{2}/.test(dec)) {
-        dec = decodeURIComponent(dec);
-      }
-      return dec;
-    } catch {
-      return u;
-    }
+  // Express has already decoded query parameters. Re-parsing originalUrl
+  // appends Vercel's injected `path` to the remote URL and corrupts signed URLs.
+  const cleanUrl = (value: string) => {
+    if (typeof value !== 'string') return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    try { return decodeURIComponent(value); } catch { return ''; }
   };
-
   targetUrl = cleanUrl(targetUrl);
   fallbackUrl = cleanUrl(fallbackUrl);
 
@@ -1395,15 +1420,16 @@ app.get('/api/covers/proxy', async (req, res) => {
           'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         }
       });
-      clearTimeout(timeout);
       if (response.ok) {
         const contentType = response.headers.get('content-type') || 'image/jpeg';
         if (contentType.startsWith('image/') || contentType.includes('octet-stream')) {
           const arrayBuffer = await response.arrayBuffer();
-          return { buffer: Buffer.from(arrayBuffer), contentType };
+          return arrayBuffer.byteLength ? { buffer: Buffer.from(arrayBuffer), contentType } : null;
         }
       }
     } catch {
+      // Try the alternate image when the source fails.
+    } finally {
       clearTimeout(timeout);
     }
     return null;
@@ -1423,7 +1449,8 @@ app.get('/api/covers/proxy', async (req, res) => {
   }
 
   res.setHeader('Content-Type', 'image/svg+xml');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Cover-Placeholder', '1');
   return res.send(FALLBACK_COVER_SVG);
 });
 
@@ -1436,7 +1463,7 @@ app.get(['/api/games/find-cover', '/api/games/find-covers'], async (req, res) =>
       return res.status(400).json({ error: 'Titre requis' });
     }
 
-    const { bestCover, covers } = await findOfficialCovers(title, consoleName);
+    const { bestCover, covers } = await findOfficialCovers(title, consoleName, typeof req.query.preferred === 'string' ? req.query.preferred : '');
     return res.json({
       coverUrl: bestCover || null,
       covers: covers || [],
@@ -2147,4 +2174,3 @@ if (!process.env.VERCEL) {
     console.error('Failed to start server:', err);
   });
 }
-

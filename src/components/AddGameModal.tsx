@@ -10,17 +10,8 @@ import { lookupBarcodeInCatalog, searchGamesInCatalog } from '../data/barcodeCat
 import { parseGoogleResultText } from '../utils/googleSearchParser';
 import { requestBarcodeLookup } from '../utils/barcodeLookup';
 
-export function getSafeCoverUrl(url?: string): string {
-  if (!url) return '';
-  const trimmed = url.trim();
-  if (trimmed.startsWith('/api/covers/proxy') || trimmed.startsWith('data:image/')) {
-    return trimmed;
-  }
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return `/api/covers/proxy?url=${encodeURIComponent(trimmed)}`;
-  }
-  return trimmed;
-}
+import { getSafeCoverUrl } from '../utils/imageUtils';
+export { getSafeCoverUrl } from '../utils/imageUtils';
 
 interface AddGameModalProps {
   isOpen: boolean;
@@ -89,6 +80,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
   const lastSelectedTitleRef = useRef<string | null>(null);
   const barcodeLookupInFlightRef = useRef(false);
+  const coverRequestIdRef = useRef(0);
   const suggestionsBoxRef = useRef<HTMLDivElement>(null);
   const [inlineGeminiKey, setInlineGeminiKey] = useState('');
   const [showInlineKeyInput, setShowInlineKeyInput] = useState(false);
@@ -291,17 +283,27 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       ? g.estimatedValue
       : marketCote;
     setEstimatedValue(finalEstimated);
-    if (g.coverUrl) {
-      setCoverUrl(getSafeCoverUrl(g.coverUrl));
-    } else {
-      fetch(`/api/games/find-cover?title=${encodeURIComponent(g.title)}&console=${encodeURIComponent(targetConsole)}`)
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.coverUrl) setCoverUrl(getSafeCoverUrl(d.coverUrl));
-          if (d.covers && d.covers.length > 0) setCoverAlternatives(d.covers);
-        })
-        .catch(() => {});
-    }
+    const requestId = ++coverRequestIdRef.current;
+    setCoverUrl(g.coverUrl ? getSafeCoverUrl(g.coverUrl) : '');
+    setCoverAlternatives([]);
+    setIsSearchingCover(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const params = new URLSearchParams({title: g.title, console: targetConsole});
+    if (g.coverUrl) params.set('preferred', g.coverUrl);
+    // Validate supplied catalogue images too: many old links point to logos or missing files.
+    fetch(`/api/games/find-cover?${params}`, {signal: controller.signal})
+      .then(r => { if (!r.ok) throw new Error('Cover service unavailable'); return r.json(); })
+      .then(d => {
+        if (requestId !== coverRequestIdRef.current) return;
+        setCoverUrl(d.coverUrl ? getSafeCoverUrl(d.coverUrl) : '');
+        setCoverAlternatives(Array.isArray(d.covers) ? d.covers : []);
+      })
+      .catch(() => { /* Keep the supplied image when the service is temporarily unavailable. */ })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (requestId === coverRequestIdRef.current) setIsSearchingCover(false);
+      });
   };
 
   const handleSelectSuggestion = async (sug: any) => {
@@ -339,6 +341,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   };
 
   const resetForm = () => {
+    coverRequestIdRef.current++;
     setTitle('');
     setShowTitleSuggestions(false);
     setTitleSuggestions([]);
@@ -398,7 +401,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     });
 
     if (localMatch) {
-      setTitle(localMatch.title || '');
+      applyGameDetails(localMatch);
       if (CONSOLE_LIST.includes(localMatch.console as any)) {
         setConsoleName(localMatch.console);
       } else {
@@ -630,21 +633,25 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
 
   const handleFetchCover = async () => {
     if (!title.trim()) return;
+    const requestId = ++coverRequestIdRef.current;
     setIsSearchingCover(true);
     setLookupMessage(null);
 
     const targetConsole = consoleName === 'Autre' ? customConsole : consoleName;
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      timeoutId = setTimeout(() => controller.abort(), 9000);
 
       const res = await fetch(`/api/games/find-cover?title=${encodeURIComponent(title)}&console=${encodeURIComponent(targetConsole)}`, {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
 
+      if (!res.ok) throw new Error('Cover service unavailable');
       const data = await res.json();
+      if (requestId !== coverRequestIdRef.current) return;
       if (data.coverUrl) {
         setCoverUrl(getSafeCoverUrl(data.coverUrl));
         if (data.covers && Array.isArray(data.covers) && data.covers.length > 0) {
@@ -661,12 +668,14 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
         });
       }
     } catch {
+      if (requestId !== coverRequestIdRef.current) return;
       setLookupMessage({
         type: 'warning',
         text: 'La recherche automatique a pris trop de temps. Utilisez le bouton Google Images ci-dessous pour coller une image.',
       });
     } finally {
-      setIsSearchingCover(false);
+      if (timeoutId) clearTimeout(timeoutId);
+      if (requestId === coverRequestIdRef.current) setIsSearchingCover(false);
     }
   };
 
@@ -731,7 +740,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || isSearchingCover) return;
 
     const calculatedEstimatedValue = typeof estimatedValue === 'number'
       ? estimatedValue
@@ -748,6 +757,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
         status,
         rating,
         notes: notes.trim() || primaryStockMatch.notes,
+        coverUrl: coverUrl.trim() || primaryStockMatch.coverUrl,
       });
       handleClose();
       return;
@@ -1306,7 +1316,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
 
               {/* Console selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-retro">
-                <div>
+                <div
                   <label htmlFor="game-console" className="block text-xs font-bold font-pixel text-slate-300 mb-1">
                     CONSOLE / PLATEFORME *
                   </label>
@@ -1324,7 +1334,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     }}
                     className="w-full px-3 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 cursor-pointer"
                   >
-                   {CONSOLE_LIST.map((c) => (
+                    {CONSOLE_LIST.map((c) => (
                       <option key={c} value={c} className="bg-[#151c2e] text-slate-100">
                         {c}
                       </option>
@@ -1684,7 +1694,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     type="text"
                     placeholder="URL de la jaquette ou cliquez sur Rechercher..."
                     value={coverUrl}
-                    onChange={(e) => setCoverUrl(e.target.value)}
+                    onChange={(e) => { coverRequestIdRef.current++; setIsSearchingCover(false); setCoverUrl(e.target.value); }}
                     className="flex-1 px-3 py-2 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                   />
                   {coverUrl && (
@@ -1758,11 +1768,11 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                 <button
                   id="btn-submit-game"
                   type="submit"
-                  disabled={!title.trim()}
+                  disabled={!title.trim() || isSearchingCover}
                   className="px-5 py-2.5 text-xs font-bold font-pixel text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
-                  AJOUTER AU CATALOGUE
+                  {isSearchingCover ? 'RECHERCHE DE JAQUETTE…' : 'AJOUTER AU CATALOGUE'}
                 </button>
               </div>
             </form>
