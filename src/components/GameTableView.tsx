@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import type {PriceRefreshProgress} from '../utils/bulkMarketQuotes';
 import { Game } from '../types';
 import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import {
@@ -35,7 +36,9 @@ interface GameTableViewProps {
   onSelectConsole?: (consoleName: string) => void;
   isSubSection?: boolean;
   onUpdateGamePrice?: (gameId: string, newPrice: number) => void;
-  onRecalculateAllPrices?: () => void;
+  onRecalculateAllPrices?: () => Promise<void>;
+  priceRefreshProgress?: PriceRefreshProgress | null;
+  onCancelPriceRefresh?: () => void;
   onResetGamePrice?: (gameId: string) => void;
 }
 
@@ -50,6 +53,8 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
   isSubSection = false,
   onUpdateGamePrice,
   onRecalculateAllPrices,
+  priceRefreshProgress,
+  onCancelPriceRefresh,
   onResetGamePrice,
 }) => {
   const [sortField, setSortField] = useState<SortField>('title');
@@ -695,7 +700,9 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
         isOpen={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
         games={games}
-        onRecalculateAll={() => onRecalculateAllPrices && onRecalculateAllPrices()}
+        onRecalculateAll={async () => {await onRecalculateAllPrices?.();}}
+        priceRefreshProgress={priceRefreshProgress}
+        onCancelPriceRefresh={onCancelPriceRefresh}
         onApplyPercentage={handleApplyPercentage}
         onUpdateSinglePrice={(id, price) => onUpdateGamePrice && onUpdateGamePrice(id, price)}
         onResetCustomPrices={handleResetCustomPrices}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import type {PriceRefreshProgress} from '../utils/bulkMarketQuotes';
 import { Game } from '../types';
 import {
   Coins,
@@ -25,7 +26,9 @@ interface UpdatePricesModalProps {
   isOpen: boolean;
   onClose: () => void;
   games: Game[];
-  onRecalculateAll: () => void;
+  onRecalculateAll: () => Promise<void>;
+  priceRefreshProgress?: PriceRefreshProgress | null;
+  onCancelPriceRefresh?: () => void;
   onApplyPercentage: (percent: number) => void;
   onUpdateSinglePrice: (gameId: string, newPrice: number) => void;
   onResetCustomPrices: () => void;
@@ -36,11 +39,13 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
   onClose,
   games,
   onRecalculateAll,
+  priceRefreshProgress,
+  onCancelPriceRefresh,
   onApplyPercentage,
   onUpdateSinglePrice,
   onResetCustomPrices,
 }) => {
-  const [activeTab, setActiveTab] = useState<'source' | 'actions' | 'edit'>('source');
+  const [activeTab, setActiveTab] = useState<'source' | 'actions' | 'edit'>('actions');
   const [percentAdjust, setPercentAdjust] = useState<number>(10);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,9 +59,10 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
     setTimeout(() => setSuccessMessage(null), 3500);
   };
 
-  const handleExecuteRecalculate = () => {
-    onRecalculateAll();
-    showToast('Les estimations indicatives ont été recalculées localement. Aucune vente récente n’a été importée.');
+  const handleExecuteRecalculate = async () => {
+    if (priceRefreshProgress?.running) return;
+    setSuccessMessage(null);
+    await onRecalculateAll();
   };
 
   const handleExecutePercentage = (positive: boolean) => {
@@ -174,6 +180,13 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
             </button>
           </div>
         )}
+
+        {priceRefreshProgress && <div className="px-4 py-3 border-b border-emerald-700 bg-emerald-950 text-xs text-emerald-200" role="status" aria-live="polite">
+          <p>{priceRefreshProgress.running ? 'Consultation des cotes' : priceRefreshProgress.cancelled ? 'Mise à jour arrêtée' : 'Mise à jour terminée'} : {priceRefreshProgress.processed} / {priceRefreshProgress.total} jeux</p>
+          <progress className="w-full mt-2" value={priceRefreshProgress.processed} max={priceRefreshProgress.total || 1} />
+          <p>{priceRefreshProgress.updated} actualisés · {priceRefreshProgress.unchanged} conservés (cote indisponible ou jeu modifié) · {priceRefreshProgress.skipped} dématérialisés exclus</p>
+          {priceRefreshProgress.running && <button type="button" onClick={onCancelPriceRefresh} className="underline mt-2">Arrêter la mise à jour</button>}
+        </div>}
 
         {/* Content Body */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5">
@@ -300,19 +313,20 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                   <div>
                     <h4 className="text-sm font-bold font-pixel text-emerald-300 flex items-center gap-1.5">
                       <RefreshCw className="w-4 h-4 text-emerald-400" />
-                      RECALCULER LES ESTIMATIONS LOCALES
+                      METTRE À JOUR TOUTES LES COTES
                     </h4>
                     <p className="text-xs text-slate-300 mt-1">
-                      Remplace les valeurs des {games.length} jeux par les repères indicatifs locaux selon la console et l’état. Cette action remplace aussi vos valeurs personnalisées et les cotes consultées; elle ne télécharge aucune vente récente.
+                      Consulte la cote de chaque jeu de votre collection selon son titre, sa console et son état. Les valeurs trouvées remplacent les anciens prix, y compris personnalisés; les jeux sans cote vérifiée conservent leur valeur. Sources, dates et comparaisons disponibles sont enregistrées.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleExecuteRecalculate}
+                    disabled={priceRefreshProgress?.running || games.length === 0}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold font-pixel shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer border border-emerald-400"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    RECALCULER TOUT
+                    {priceRefreshProgress?.running ? 'MISE À JOUR EN COURS…' : 'METTRE À JOUR TOUS LES JEUX'}
                   </button>
                 </div>
 
@@ -342,6 +356,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleExecutePercentage(true)}
+                      disabled={priceRefreshProgress?.running}
                       className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-xs font-bold transition cursor-pointer"
                     >
                       +{percentAdjust}%
@@ -349,6 +364,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleExecutePercentage(false)}
+                      disabled={priceRefreshProgress?.running}
                       className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
                     >
                       -{percentAdjust}%
@@ -370,6 +386,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                   <button
                     type="button"
                     onClick={handleExecuteReset}
+                    disabled={priceRefreshProgress?.running}
                     className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold font-pixel shadow-xs transition flex items-center gap-1.5 shrink-0 cursor-pointer border border-amber-500"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
