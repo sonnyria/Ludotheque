@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Trash2, Edit3, Barcode, Calendar, Building, Code2, Tag, Star, Clock, Check, Sparkles, Boxes, Plus, Minus, AlertTriangle, Coins, TrendingUp, TrendingDown, RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
 import { Game, GameCondition, GameStatus } from '../types';
 import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
 import { CONSOLE_LIST } from '../data/sampleGames';
 import {
   estimateMarketValue,
+  getGameEstimatedValue,
   calculateValueMargin,
   getMisterGamePriceSearchUrl,
   getEbayFranceSoldSearchUrl,
@@ -31,6 +32,40 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
   onDeleteGame,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isConsultingPrice, setIsConsultingPrice] = useState(false);
+  const [priceMessage, setPriceMessage] = useState('');
+  const latestGameRef = useRef(game);
+  latestGameRef.current = game;
+  const priceAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    setPriceMessage('');
+    setIsConsultingPrice(false);
+    return () => {priceAbortRef.current?.abort();};
+  }, [isOpen, game?.id]);
+  const consultPrice = async () => {
+    if (!game || game.condition === 'dematerialise') return;
+    const target = game;
+    const controller = new AbortController();
+    priceAbortRef.current?.abort();
+    priceAbortRef.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 11000);
+    setIsConsultingPrice(true);
+    setPriceMessage('');
+    try {
+      const response = await fetch('/api/games/estimate-price', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({title:target.title, console:target.console, condition:target.condition}), signal:controller.signal});
+      if (!response.ok) throw new Error('Cote indisponible');
+      const quote = await response.json();
+      const current = latestGameRef.current;
+      if (controller.signal.aborted || !current || current.id !== target.id || current.title !== target.title || current.console !== target.console || current.condition !== target.condition || current.estimatedValue !== target.estimatedValue || current.marketQuote !== target.marketQuote) return;
+      if (quote.kind === 'observed' && Number.isFinite(quote.estimatedValue) && quote.estimatedValue >= 0) {
+        onUpdateGame({...current, estimatedValue:quote.estimatedValue, marketQuote:quote});
+        setPriceMessage('Cote consultée et enregistrée.');
+      } else setPriceMessage('Aucune cote vérifiée disponible. Votre valeur est conservée.');
+    } catch { if (!controller.signal.aborted) setPriceMessage('Consultation indisponible. Votre valeur est conservée.'); }
+    finally {clearTimeout(timeout); if (priceAbortRef.current === controller) setIsConsultingPrice(false);}
+  };
+
   const [editedTitle, setEditedTitle] = useState('');
   const [editedConsole, setEditedConsole] = useState('');
   const [editedBarcode, setEditedBarcode] = useState('');
@@ -53,6 +88,8 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
   if (!isOpen || !game) return null;
 
   const startEdit = () => {
+    priceAbortRef.current?.abort();
+    setIsConsultingPrice(false);
     setEditedTitle(game.title);
     setEditedConsole(game.console);
     setEditedBarcode(game.barcode || '');
@@ -69,9 +106,7 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
     setIsSearchingCover(false);
     setEditedQuantity(game.quantity || 1);
     setEditedEstimatedValue(
-      game.estimatedValue !== undefined
-        ? game.estimatedValue
-        : estimateMarketValue(game.title, game.console, game.condition)
+      getGameEstimatedValue(game)
     );
     setEditedPurchasePrice(game.purchasePrice !== undefined ? game.purchasePrice : '');
     setIsEditing(true);
@@ -96,6 +131,7 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
       notes: editedNotes.trim() || undefined,
       coverUrl: editedCoverUrl.trim() || undefined,
       quantity: editedQuantity > 0 ? editedQuantity : 1,
+      marketQuote: editedTitle.trim() === game.title && editedConsole === game.console && editedCondition === game.condition && editedEstimatedValue === game.estimatedValue ? game.marketQuote : undefined,
       estimatedValue: typeof editedEstimatedValue === 'number' ? editedEstimatedValue : undefined,
       purchasePrice: typeof editedPurchasePrice === 'number' ? editedPurchasePrice : undefined,
     });
@@ -105,9 +141,7 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
   const theme = getConsoleTheme(game.console);
   const conditionInfo = CONDITION_LABELS[game.condition] || { label: game.condition, desc: '' };
   const statusInfo = STATUS_LABELS[game.status] || { label: game.status, color: '' };
-  const currentEstimatedValue = game.estimatedValue !== undefined
-    ? game.estimatedValue
-    : estimateMarketValue(game.title, game.console, game.condition);
+  const currentEstimatedValue = getGameEstimatedValue(game);
   const margin = game.purchasePrice !== undefined
     ? calculateValueMargin(game.purchasePrice, currentEstimatedValue)
     : null;
@@ -541,7 +575,7 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                           COTE OCCASION
                         </span>
                         <span className="text-[9px] font-pixel font-semibold text-emerald-300 bg-emerald-950 border border-emerald-500/60 px-1.5 py-0.2 rounded">
-                          ARGUS
+                          ESTIMATION
                         </span>
                       </div>
                       <div className="flex items-baseline gap-2 mt-0.5">
@@ -592,11 +626,13 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
                   <div className="flex items-center justify-between gap-2 text-[11px] text-emerald-300">
                     <span className="font-semibold flex items-center gap-1.5">
                       <Coins className="w-3.5 h-3.5 text-emerald-400" />
-                      Argus de référence : <strong className="text-emerald-300 font-bold">Mister Game Price</strong> & <strong className="text-emerald-300 font-bold">eBay France</strong> (Euros)
+                      {game.marketQuote ? <a href={game.marketQuote.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">{game.marketQuote.source} · consulté le {new Date(game.marketQuote.checkedAt).toLocaleDateString('fr-FR')} · marché PAL</a> : 'Valeur indicative ou saisie manuellement. Vérifiez les ventes comparables.'}
                     </span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 pt-1 font-pixel text-[9px]">
+                    <button type="button" onClick={consultPrice} disabled={isConsultingPrice || game.condition === 'dematerialise'} className="rounded px-2 py-1 bg-emerald-900 text-emerald-200 disabled:opacity-50">{isConsultingPrice ? 'Consultation…' : 'Consulter la cote'}</button>
+                    {priceMessage && <span className="font-retro text-slate-300">{priceMessage}</span>}
                     <a
                       href={getMisterGamePriceSearchUrl(game.title, game.console)}
                       target="_blank"
@@ -820,3 +856,4 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
     </div>
   );
 };
+

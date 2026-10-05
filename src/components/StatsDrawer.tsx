@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { X, BarChart3, Download, Upload, RefreshCw, Trophy, Gamepad2, Disc3, ShieldCheck, AlertTriangle, Coins, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
 import { Game } from '../types';
 import { getConsoleTheme, CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
-import { estimateMarketValue, calculateValueMargin } from '../utils/marketPriceGuide';
+import { estimateMarketValue, getGameEstimatedValue, calculateValueMargin } from '../utils/marketPriceGuide';
 
 interface StatsDrawerProps {
   isOpen: boolean;
@@ -40,7 +40,7 @@ export const StatsDrawer: React.FC<StatsDrawerProps> = ({
 
   games.forEach((g) => {
     const qty = g.quantity || 1;
-    const estVal = g.estimatedValue !== undefined ? g.estimatedValue : estimateMarketValue(g.title, g.console, g.condition);
+    const estVal = getGameEstimatedValue(g);
     const lineVal = estVal * qty;
 
     totalEstimatedValue += lineVal;
@@ -80,7 +80,7 @@ export const StatsDrawer: React.FC<StatsDrawerProps> = ({
   const exportToCsv = () => {
     const headers = ['Titre', 'Console', 'Quantite', 'Cote Occasion (€)', 'Prix Achat (€)', 'Code-barres', 'Annee', 'Editeur', 'Developpeur', 'Genre', 'Etat', 'Statut', 'Note'];
     const rows = games.map((g) => {
-      const estVal = g.estimatedValue !== undefined ? g.estimatedValue : estimateMarketValue(g.title, g.console, g.condition);
+      const estVal = getGameEstimatedValue(g);
       return [
         `"${(g.title || '').replace(/"/g, '""')}"`,
         `"${(g.console || '').replace(/"/g, '""')}"`,
@@ -383,3 +383,4 @@ export const StatsDrawer: React.FC<StatsDrawerProps> = ({
     </div>
   );
 };
+

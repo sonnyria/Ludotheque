@@ -14,6 +14,7 @@ import {
 import {
   COTE_SOURCE_INFO,
   estimateMarketValue,
+  getGameEstimatedValue,
   getMisterGamePriceSearchUrl,
   getEbayFranceSoldSearchUrl,
   getLeboncoinSearchUrl,
@@ -55,7 +56,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
 
   const handleExecuteRecalculate = () => {
     onRecalculateAll();
-    showToast('Toutes les cotes ont été recalculées selon l’argus français Mister Game Price.');
+    showToast('Les estimations indicatives ont été recalculées localement. Aucune vente récente n’a été importée.');
   };
 
   const handleExecutePercentage = (positive: boolean) => {
@@ -182,10 +183,10 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
               <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 space-y-2.5">
                 <div className="flex items-center gap-2 text-emerald-300 font-bold text-sm font-pixel">
                   <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>ARGUS MARCHÉ FRANÇAIS & EUROPÉEN</span>
+                  <span>ESTIMATIONS ET VÉRIFICATION</span>
                 </div>
                 <p className="text-xs text-emerald-200/90 leading-relaxed">
-                  L'argus de l'application est aligné sur les transactions effectives du marché français et européen (éditions <strong>PAL France</strong> avec boîte, jaquette et notice en français). Il se base en priorité sur <strong className="text-amber-300">Mister Game Price</strong> (l'Argus français de référence) et l'historique des <strong className="text-amber-300">ventes terminées et payées en Euros sur eBay France</strong>, complété par <strong className="text-amber-300">LeBonCoin & Vinted</strong>.
+                  {COTE_SOURCE_INFO.description}
                 </p>
               </div>
 
@@ -264,7 +265,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
                   <div className="p-2.5 rounded-lg bg-[#141b2e] border border-slate-700">
                     <span className="block font-bold text-slate-200">Neuf sous blister</span>
-                    <span className="text-emerald-400 font-mono font-bold">+100% (x2.0)</span>
+                    <span className="text-emerald-400 font-mono font-bold">130% à 200% (indicatif)</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-[#141b2e] border border-slate-700">
                     <span className="block font-bold text-slate-200">Complet (CIB)</span>
@@ -272,18 +273,18 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                   </div>
                   <div className="p-2.5 rounded-lg bg-[#141b2e] border border-slate-700">
                     <span className="block font-bold text-slate-200">Loose (sans boîte)</span>
-                    <span className="text-amber-400 font-mono font-bold">40% (x0.40)</span>
+                    <span className="text-amber-400 font-mono font-bold">40% carton / 80% disque</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-[#141b2e] border border-slate-700">
                     <span className="block font-bold text-slate-200">Boîte + notice</span>
-                    <span className="text-slate-300 font-mono font-bold">40% (x0.40)</span>
+                    <span className="text-slate-300 font-mono font-bold">40% carton / 10% plastique</span>
                   </div>
                 </div>
                 <div className="bg-amber-950/40 border border-amber-500/40 rounded-lg p-2.5 text-[11px] text-amber-200 space-y-1 mt-2">
                   <p className="font-semibold font-pixel text-amber-300">SPÉCIFICITÉS MARCHÉ FR :</p>
                   <ul className="list-disc list-inside space-y-0.5 text-slate-300">
-                    <li><strong>Jeux de sport annuels (FIFA, PES, NBA 2K) :</strong> plafonnés à <strong>2€ - 3€</strong> complets (1€ loose), conformément au marché réel de l'occasion en France.</li>
-                    <li><strong>Rétrogaming en boîte carton :</strong> la boîte et notice FR d'origine font 60 à 70% de la cote globale.</li>
+                    <li><strong>Jeux de sport annuels (FIFA, PES, NBA 2K) :</strong> anciens millésimes estimés à <strong>3€</strong> complets. Les sorties récentes sont exclues de cette règle indicative.</li>
+                    <li><strong>Boîtes carton rétro :</strong> coefficient indicatif distinct des boîtiers plastique. Les jeux rares et sous blister nécessitent une vérification au cas par cas.</li>
                   </ul>
                 </div>
               </div>
@@ -299,10 +300,10 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
                   <div>
                     <h4 className="text-sm font-bold font-pixel text-emerald-300 flex items-center gap-1.5">
                       <RefreshCw className="w-4 h-4 text-emerald-400" />
-                      RECALCULER SELON L'ARGUS FRANÇAIS
+                      RECALCULER LES ESTIMATIONS LOCALES
                     </h4>
                     <p className="text-xs text-slate-300 mt-1">
-                      Réapplique les cotes officielles de Mister Game Price et des ventes réelles en France à l'ensemble des {games.length} jeux selon leur état et leur édition.
+                      Remplace les valeurs des {games.length} jeux par les repères indicatifs locaux selon la console et l’état. Cette action remplace aussi vos valeurs personnalisées et les cotes consultées; elle ne télécharge aucune vente récente.
                     </p>
                   </div>
                   <button
@@ -398,9 +399,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
               <div className="divide-y divide-slate-800 border border-slate-700 rounded-xl max-h-72 overflow-y-auto bg-[#0b0e18]">
                 {filteredGames.map((game) => {
                   const isEditingThis = editingId === game.id;
-                  const currentVal = game.estimatedValue !== undefined
-                    ? game.estimatedValue
-                    : estimateMarketValue(game.title, game.console, game.condition);
+                  const currentVal = getGameEstimatedValue(game);
 
                   return (
                     <div
@@ -493,7 +492,7 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
         {/* Footer */}
         <div className="bg-[#0b0e18] border-t border-slate-800 px-5 py-3 flex items-center justify-between text-xs shrink-0">
           <div className="text-slate-400 font-retro">
-            Source : <strong className="text-amber-300">PriceCharting</strong> & <strong className="text-emerald-400">Mister Game Price</strong>
+            Repères locaux indicatifs · liens externes pour vérifier
           </div>
           <button
             type="button"
@@ -507,3 +506,4 @@ export const UpdatePricesModal: React.FC<UpdatePricesModalProps> = ({
     </div>
   );
 };
+
