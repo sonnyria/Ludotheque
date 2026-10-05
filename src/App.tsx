@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Game, ViewMode } from './types';
 import { INITIAL_GAMES } from './data/sampleGames';
 import { Navbar } from './components/Navbar';
@@ -15,6 +15,7 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { getConsoleTheme } from './utils/consoleThemes';
 import { estimateMarketValue, getGameEstimatedValue, COTE_SOURCE_INFO } from './utils/marketPriceGuide';
 import { Gamepad2, Plus, Barcode, Sparkles, FilterX, RotateCcw, Trash2, X, Coins, Layers, RefreshCw, ExternalLink, Info } from 'lucide-react';
+import {refreshCollectionQuotes, applyMarketQuote, PriceRefreshProgress} from './utils/bulkMarketQuotes';
 import { UpdatePricesModal } from './components/UpdatePricesModal';
 
 const STORAGE_KEY = 'collection_jeux_video_v1';
@@ -92,6 +93,12 @@ export default function App() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isUpdatePricesModalOpen, setIsUpdatePricesModalOpen] = useState(false);
+  const [priceRefreshProgress, setPriceRefreshProgress] = useState<PriceRefreshProgress | null>(null);
+  const priceRefreshAbortRef = useRef<AbortController | null>(null);
+  const latestGamesRef = useRef(games);
+  latestGamesRef.current = games;
+  useEffect(() => () => priceRefreshAbortRef.current?.abort(), []);
+
   const [showCoteSourceBanner, setShowCoteSourceBanner] = useState(false);
   const [gameToDelete, setGameToDelete] = useState<Game | null>(null);
   const [deletedToast, setDeletedToast] = useState<{ game: Game; index: number } | null>(null);
@@ -256,15 +263,26 @@ export default function App() {
     );
   };
 
-  const handleRecalculateAllPrices = () => {
-    setGames((prev) =>
-      prev.map((g) => ({
-        ...g,
-        marketQuote: undefined,
-        estimatedValue: estimateMarketValue(g.title, g.console, g.condition),
-      }))
-    );
+  const handleRecalculateAllPrices = async () => {
+    if (priceRefreshAbortRef.current) return;
+    const controller = new AbortController();
+    priceRefreshAbortRef.current = controller;
+    const snapshot = [...latestGamesRef.current];
+    try {
+      await refreshCollectionQuotes(snapshot, {
+        signal:controller.signal,
+        onProgress:setPriceRefreshProgress,
+        onQuote:(original,quote) => {
+          const current = latestGamesRef.current.find(g => g.id === original.id);
+          if (!current || !applyMarketQuote(current,original,quote)) return false;
+          setGames(prev => prev.map(g => g.id === original.id ? applyMarketQuote(g,original,quote) || g : g));
+          setSelectedGame(prev => prev?.id === original.id ? applyMarketQuote(prev,original,quote) || prev : prev);
+          return true;
+        },
+      });
+    } finally {priceRefreshAbortRef.current = null;}
   };
+  const handleCancelPriceRefresh = () => priceRefreshAbortRef.current?.abort();
 
   const handleApplyPercentage = (percent: number) => {
     setGames((prev) =>
@@ -381,6 +399,8 @@ export default function App() {
             isSubSection={isSubSection}
             onUpdateGamePrice={handleUpdateGamePrice}
             onRecalculateAllPrices={handleRecalculateAllPrices}
+            priceRefreshProgress={priceRefreshProgress}
+            onCancelPriceRefresh={handleCancelPriceRefresh}
             onResetGamePrice={handleResetGamePrice}
           />
         );
@@ -745,6 +765,8 @@ export default function App() {
         onClose={() => setIsUpdatePricesModalOpen(false)}
         games={games}
         onRecalculateAll={handleRecalculateAllPrices}
+        priceRefreshProgress={priceRefreshProgress}
+        onCancelPriceRefresh={handleCancelPriceRefresh}
         onApplyPercentage={handleApplyPercentage}
         onUpdateSinglePrice={handleUpdateGamePrice}
         onResetCustomPrices={handleResetCustomPrices}
