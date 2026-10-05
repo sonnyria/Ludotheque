@@ -8,6 +8,7 @@ import { estimateMarketValue } from '../utils/marketPriceGuide';
 import { getGeminiAuthHeaders, hasStoredGeminiApiKey, getStoredGeminiApiKey, setStoredGeminiApiKey, callDirectGeminiJson } from '../utils/geminiApiKey';
 import { lookupBarcodeInCatalog, searchGamesInCatalog } from '../data/barcodeCatalog';
 import { parseGoogleResultText } from '../utils/googleSearchParser';
+import { requestBarcodeLookup } from '../utils/barcodeLookup';
 
 export function getSafeCoverUrl(url?: string): string {
   if (!url) return '';
@@ -453,21 +454,13 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     }
 
     // 3. Live search across online databases & web
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => controller.abort(), 10000);
       const userKey = getStoredGeminiApiKey();
 
-      const res = await fetch('/api/games/lookup-barcode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getGeminiAuthHeaders() },
-        body: JSON.stringify({ barcode: cleanCode, apiKey: userKey || undefined }),
-        signal: controller.signal,
+      const data = await requestBarcodeLookup(cleanCode, {
+        apiKey: userKey || undefined,
+        headers: getGeminiAuthHeaders(),
       });
-      clearTimeout(timeoutId);
-
-      const data = await res.json();
 
       if (data.found && data.game) {
         applyGameDetails({ ...data.game, barcode: cleanCode });
@@ -504,8 +497,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       // d'identification d'un code-barres. Cela évite qu'une réponse IA
       // différente remplace un consensus web déterministe.
     } catch (error) {
-      if (timeoutId) clearTimeout(timeoutId);
-      // Timeout, réseau indisponible ou serveur en erreur : le spinner doit toujours s'arrêter.
+      setLookupMessage({
+        type: 'warning',
+        text: error instanceof Error ? error.message : 'Service de recherche indisponible. Réessayez.',
+      });
+      setActiveTab('manual');
+      return;
     } finally {
       barcodeLookupInFlightRef.current = false;
       setIsSearching(false);
@@ -1327,7 +1324,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     }}
                     className="w-full px-3 py-2.5 bg-[#151c2e] border border-slate-700 rounded-xl text-sm text-slate-100 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 cursor-pointer"
                   >
-                    {CONSOLE_LIST.map((c) => (
+                   {CONSOLE_LIST.map((c) => (
                       <option key={c} value={c} className="bg-[#151c2e] text-slate-100">
                         {c}
                       </option>
@@ -1775,3 +1772,4 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
     </div>
   );
 };
+
