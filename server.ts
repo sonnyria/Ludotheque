@@ -2,8 +2,8 @@ import express from 'express';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { BARCODE_CATALOG } from './src/data/barcodeCatalog';
-import { hasExactProductIdentifier, verifyBarcodeSources } from './server/barcodeEvidence';
+import { BARCODE_CATALOG } from './src/data/barcodeCatalog.js';
+import { hasExactProductIdentifier, verifyBarcodeSources } from './server/barcodeEvidence.js';
 // Aucune base de données interne : toutes les recherches s'effectuent en direct sur le web
 
 dotenv.config();
