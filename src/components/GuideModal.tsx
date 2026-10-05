@@ -33,7 +33,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { Game } from '../types';
-import { estimateMarketValue } from '../utils/marketPriceGuide';
+import { estimateMarketValue, getGameEstimatedValue } from '../utils/marketPriceGuide';
 import {
   getStoredGeminiApiKey,
   setStoredGeminiApiKey,
@@ -121,7 +121,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({
     try {
       const headers = ['Titre', 'Console', 'Quantite', 'Cote Occasion (€)', 'Prix Achat (€)', 'Code-barres', 'Annee', 'Editeur', 'Developpeur', 'Genre', 'Etat', 'Statut', 'Note'];
       const rows = games.map((g) => {
-        const estVal = g.estimatedValue !== undefined ? g.estimatedValue : estimateMarketValue(g.title, g.console, g.condition);
+        const estVal = getGameEstimatedValue(g);
         return [
           `"${(g.title || '').replace(/"/g, '""')}"`,
           `"${(g.console || '').replace(/"/g, '""')}"`,
@@ -999,7 +999,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({
                 <div className="space-y-1 font-retro">
                   <h4 className="font-bold text-emerald-300 text-sm font-pixel text-xs">Argus réaliste français & européen</h4>
                   <p className="text-emerald-200/90 text-xs leading-relaxed">
-                    Les cotes sont alignées sur le marché français (PAL FR) grâce aux données de référence de <strong>Mister Game Price</strong> et aux <strong>ventes conclues sur eBay France</strong> en Euros (€). Chaque fiche jeu propose des liens directs pour vérifier la valeur en direct.
+                    Les valeurs locales sont indicatives, calculées selon le titre, la console et l’état. À l’ajout, une consultation PriceCharting peut fournir une cote PAL avec sa source et sa date. Les liens vers les autres sites servent à vérifier manuellement les prix. Une cote PAL ne garantit pas une édition française ni le prix obtenu à la revente.
                   </p>
                 </div>
               </div>
@@ -1194,3 +1194,4 @@ export const GuideModal: React.FC<GuideModalProps> = ({
     </div>
   );
 };
+

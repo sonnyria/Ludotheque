@@ -29,6 +29,16 @@ export type GameStatus = 'backlog' | 'playing' | 'completed' | 'wishlist';
 
 export type ViewMode = 'list' | 'shelf' | 'table';
 
+export interface MarketQuote {
+  estimatedValue: number;
+  currency: 'EUR';
+  source: string;
+  sourceUrl: string;
+  checkedAt: string;
+  market: string;
+  condition: GameCondition;
+}
+
 export interface Game {
   id: string;
   title: string;
@@ -45,6 +55,7 @@ export interface Game {
   notes?: string;
   purchasePrice?: number;
   estimatedValue?: number;
+  marketQuote?: MarketQuote;
   addedAt: string;
   quantity?: number;
 }
@@ -61,3 +72,4 @@ export interface GameLookupResult {
   barcode?: string;
   confidence?: 'high' | 'medium' | 'low';
 }
+

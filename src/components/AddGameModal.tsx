@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Barcode, PenTool, Sparkles, Check, AlertTriangle, Disc3, ShieldCheck, Boxes, Plus, Layers, ArrowRight, Coins, Search, Settings, Loader2, ExternalLink, Globe, ClipboardPaste, Key } from 'lucide-react';
-import { Game, GameCondition, GameStatus } from '../types';
+import { Game, GameCondition, GameStatus, MarketQuote } from '../types';
 import { CONSOLE_LIST, INITIAL_GAMES, SAMPLE_BARCODES } from '../data/sampleGames';
 import { BarcodeScanner } from './BarcodeScanner';
 import { CONDITION_LABELS, STATUS_LABELS } from '../utils/consoleThemes';
-import { estimateMarketValue } from '../utils/marketPriceGuide';
+import { estimateMarketValue, getGameEstimatedValue } from '../utils/marketPriceGuide';
 import { getGeminiAuthHeaders, hasStoredGeminiApiKey, getStoredGeminiApiKey, setStoredGeminiApiKey, callDirectGeminiJson } from '../utils/geminiApiKey';
 import { lookupBarcodeInCatalog, searchGamesInCatalog } from '../data/barcodeCatalog';
 import { parseGoogleResultText } from '../utils/googleSearchParser';
@@ -68,6 +68,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
   const [quantity, setQuantity] = useState<number>(1);
   const [quantityToAdd, setQuantityToAdd] = useState<number>(1);
   const [estimatedValue, setEstimatedValue] = useState<number | ''>('');
+  const [marketQuote, setMarketQuote] = useState<MarketQuote | undefined>();
+  const [isSearchingPrice, setIsSearchingPrice] = useState(false);
+  const [priceRefresh, setPriceRefresh] = useState(0);
+  const priceRequestRef = useRef(0);
+  const storedPriceRef = useRef<Game | null>(null);
   const [purchasePrice, setPurchasePrice] = useState<number | ''>('');
   const [stockUpdatedSuccess, setStockUpdatedSuccess] = useState<string | null>(null);
 
@@ -279,10 +284,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     if (g.synopsis && !notes) setNotes(g.synopsis);
     const targetConsole = g.console || consoleName;
     const marketCote = estimateMarketValue(g.title, targetConsole, condition);
-    const finalEstimated = (typeof g.estimatedValue === 'number' && g.estimatedValue > 0)
-      ? g.estimatedValue
-      : marketCote;
-    setEstimatedValue(finalEstimated);
+    setEstimatedValue(marketCote);
     const requestId = ++coverRequestIdRef.current;
     setCoverUrl(g.coverUrl ? getSafeCoverUrl(g.coverUrl) : '');
     setCoverAlternatives([]);
@@ -363,6 +365,9 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     setQuantity(1);
     setQuantityToAdd(1);
     setEstimatedValue('');
+    setMarketQuote(undefined);
+    storedPriceRef.current = null;
+    ++priceRequestRef.current;
     setPurchasePrice('');
     setStockUpdatedSuccess(null);
     setLookupMessage(null);
@@ -401,6 +406,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     });
 
     if (localMatch) {
+      storedPriceRef.current = localMatch;
       applyGameDetails(localMatch);
       if (CONSOLE_LIST.includes(localMatch.console as any)) {
         setConsoleName(localMatch.console);
@@ -419,18 +425,12 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       if (localMatch.rating) setRating(localMatch.rating);
       if (typeof localMatch.purchasePrice === 'number') setPurchasePrice(localMatch.purchasePrice);
 
-      // Calculer et mettre à jour immédiatement la cote d'occasion actuelle
-      const freshCote = estimateMarketValue(localMatch.title, localMatch.console, localMatch.condition);
+      const freshCote = getGameEstimatedValue(localMatch);
       setEstimatedValue(freshCote);
-
-      // Mettre à jour automatiquement la cote occasion du jeu existant dans la collection
-      if (onUpdateGamePrice) {
-        onUpdateGamePrice(localMatch.id, freshCote);
-      }
 
       setLookupMessage({
         type: 'success',
-        text: `Jeu déjà en stock : "${localMatch.title}" (${localMatch.console}) • Cote occasion actualisée à ${freshCote} € (${localMatch.quantity || 1} exemplaire${(localMatch.quantity || 1) > 1 ? 's' : ''})`,
+        text: `Jeu déjà en stock : "${localMatch.title}" (${localMatch.console}) • Valeur conservée : ${freshCote} € (${localMatch.quantity || 1} exemplaire${(localMatch.quantity || 1) > 1 ? 's' : ''})`,
       });
       setIsSearching(false);
       barcodeLookupInFlightRef.current = false;
@@ -442,9 +442,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
     const catalogMatch = lookupBarcodeInCatalog(cleanCode);
     if (catalogMatch) {
       applyGameDetails({ ...catalogMatch, barcode: cleanCode });
-      const freshCote = (typeof catalogMatch.estimatedValue === 'number' && catalogMatch.estimatedValue > 0)
-        ? catalogMatch.estimatedValue
-        : estimateMarketValue(catalogMatch.title, catalogMatch.console, condition);
+      const freshCote = estimateMarketValue(catalogMatch.title, catalogMatch.console, condition);
       setEstimatedValue(freshCote);
       setLookupMessage({
         type: 'success',
@@ -468,27 +466,11 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({
       if (data.found && data.game) {
         applyGameDetails({ ...data.game, barcode: cleanCode });
 
-        const freshCote = (typeof data.game.estimatedValue === 'number' && data.game.estimatedValue > 0)
-          ? data.game.estimatedValue
-          : estimateMarketValue(data.game.title, data.game.console, condition);
-
-        // Si ce jeu existait déjà sous un autre format/code dans le stock, actualiser sa cote
-        const alreadyInStock = existingGames.find(
-          (g) => g.title.toLowerCase().trim() === data.game.title.toLowerCase().trim() &&
-                 g.console.toLowerCase().trim() === (data.game.console || '').toLowerCase().trim()
-        );
-        if (alreadyInStock) {
-          if (onUpdateGamePrice) {
-            onUpdateGamePrice(alreadyInStock.id, freshCote);
-          }
-          if (onUpdateGame && !alreadyInStock.barcode) {
-            onUpdateGame({ ...alreadyInStock, barcode: cleanCode, estimatedValue: freshCote });
-          }
-        }
+        const freshCote = estimateMarketValue(data.game.title, data.game.console, condition);
 
         setLookupMessage({
           type: 'success',
-          text: `Jeu identifié en direct sur le web : "${data.game.title}" (${data.game.console}) • Cote occasion actualisée : ${freshCote} €`,
+          text: `Jeu identifié en direct sur le web : "${data.game.title}" (${data.game.console}) • Estimation indicative : ${freshCote} €`,
         });
         setIsSearching(false);
         barcodeLookupInFlightRef.current = false;
@@ -679,18 +661,24 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
     }
   };
 
+  const getStockPrice = (targetGame: Game) => {
+    const sameIdentity = title.trim().toLowerCase() === targetGame.title.trim().toLowerCase() &&
+      (consoleName === 'Autre' ? customConsole.trim() : consoleName) === targetGame.console && condition === targetGame.condition;
+    return {
+      value: sameIdentity && typeof estimatedValue === 'number' ? estimatedValue : getGameEstimatedValue(targetGame),
+      quote: sameIdentity ? marketQuote : targetGame.marketQuote,
+    };
+  };
   const handleIncrementStock = (targetGame: Game) => {
-    const currentQty = targetGame.quantity || 1;
-    const newQty = currentQty + quantityToAdd;
-    const freshCote = typeof estimatedValue === 'number' && estimatedValue > 0
-      ? estimatedValue
-      : estimateMarketValue(targetGame.title, targetGame.console, targetGame.condition);
-
+    if (isSearchingPrice) return;
+    const newQty = (targetGame.quantity || 1) + quantityToAdd;
+    const {value: freshCote, quote: matchingQuote} = getStockPrice(targetGame);
     if (onUpdateGame) {
       onUpdateGame({
         ...targetGame,
         quantity: newQty,
         estimatedValue: freshCote,
+        marketQuote: matchingQuote,
         barcode: targetGame.barcode || (barcode.trim() || undefined),
       });
     } else {
@@ -707,6 +695,41 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
   };
 
   const finalConsole = consoleName === 'Autre' && customConsole.trim() ? customConsole.trim() : consoleName;
+
+  useEffect(() => {
+    const requestId = ++priceRequestRef.current;
+    setMarketQuote(undefined);
+    setIsSearchingPrice(false);
+    if (!isOpen || !title.trim()) return;
+    const stored = storedPriceRef.current;
+    storedPriceRef.current = null;
+    if (stored && stored.title === title && stored.console === finalConsole && stored.condition === condition) {
+      setEstimatedValue(stored.estimatedValue ?? estimateMarketValue(title, finalConsole, condition));
+      setMarketQuote(stored.marketQuote);
+      return;
+    }
+    setEstimatedValue(estimateMarketValue(title, finalConsole, condition));
+    if (condition === 'dematerialise') return;
+    setIsSearchingPrice(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 11000);
+    const debounce = setTimeout(async () => {
+      if (requestId !== priceRequestRef.current) return;
+      setIsSearchingPrice(true);
+      try {
+        const response = await fetch('/api/games/estimate-price', {method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({title: title.trim(), console: finalConsole, condition}), signal: controller.signal});
+        if (!response.ok) return;
+        const data = await response.json();
+        if (requestId !== priceRequestRef.current || !Number.isFinite(data.estimatedValue) || data.estimatedValue < 0) return;
+        setEstimatedValue(data.estimatedValue);
+        setMarketQuote(data.kind === 'observed' ? data : undefined);
+      } catch { /* The clearly labelled local estimate remains available. */ }
+      finally { if (requestId === priceRequestRef.current) setIsSearchingPrice(false); }
+    }, 700);
+    return () => {clearTimeout(debounce); clearTimeout(timeout); controller.abort();};
+  }, [isOpen, title, finalConsole, condition, priceRefresh]);
+
 
   // Real-time detection in existing stock
   const barcodeClean = barcode.trim();
@@ -740,7 +763,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || isSearchingCover) return;
+    if (!title.trim() || isSearchingCover || isSearchingPrice) return;
 
     const calculatedEstimatedValue = typeof estimatedValue === 'number'
       ? estimatedValue
@@ -752,6 +775,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
         ...primaryStockMatch,
         quantity: (primaryStockMatch.quantity || 1) + (quantity > 0 ? quantity : 1),
         estimatedValue: calculatedEstimatedValue,
+      marketQuote,
         barcode: primaryStockMatch.barcode || (barcode.trim() || undefined),
         condition,
         status,
@@ -778,6 +802,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
       notes: notes.trim() || undefined,
       quantity: quantity > 0 ? quantity : 1,
       estimatedValue: calculatedEstimatedValue,
+      marketQuote,
       purchasePrice: typeof purchasePrice === 'number' ? purchasePrice : undefined,
     });
 
@@ -1099,6 +1124,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                         <button
                           type="button"
                           onClick={() => handleIncrementStock(primaryStockMatch)}
+                          disabled={isSearchingPrice}
                           className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold font-pixel shadow-sm flex items-center gap-1.5 cursor-pointer transition"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -1107,18 +1133,19 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                         {onUpdateGamePrice && (
                           <button
                             type="button"
+                            disabled={isSearchingPrice}
                             onClick={() => {
-                              const freshVal = typeof estimatedValue === 'number' && estimatedValue > 0
-                                ? estimatedValue
-                                : estimateMarketValue(primaryStockMatch.title, primaryStockMatch.console, primaryStockMatch.condition);
-                              onUpdateGamePrice(primaryStockMatch.id, freshVal);
+                              if (isSearchingPrice) return;
+                              const {value: freshVal, quote} = getStockPrice(primaryStockMatch);
+                              if (onUpdateGame) onUpdateGame({...primaryStockMatch, estimatedValue:freshVal, marketQuote:quote});
+                              else onUpdateGamePrice(primaryStockMatch.id, freshVal);
                               setStockUpdatedSuccess(`Cote occasion actualisée à ${freshVal} € !`);
                               setTimeout(() => handleClose(), 1200);
                             }}
                             className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold font-pixel shadow-sm flex items-center gap-1.5 cursor-pointer transition"
                           >
                             <Coins className="w-3.5 h-3.5" />
-                            Actualiser la cote ({typeof estimatedValue === 'number' && estimatedValue > 0 ? estimatedValue : estimateMarketValue(primaryStockMatch.title, primaryStockMatch.console, primaryStockMatch.condition)} €)
+                            Actualiser la cote ({getStockPrice(primaryStockMatch).value} €)
                           </button>
                         )}
                       </div>
@@ -1586,12 +1613,12 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     <button
                       type="button"
                       onClick={() => {
-                        const val = estimateMarketValue(title, finalConsole, condition);
-                        setEstimatedValue(val);
+                        storedPriceRef.current = null;
+                        setPriceRefresh(v => v + 1);
                       }}
                       className="text-[10px] font-pixel font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
                     >
-                      Estimer auto
+                      {isSearchingPrice ? 'Consultation…' : 'Consulter la cote'}
                     </button>
                   </div>
                   <div className="relative">
@@ -1599,16 +1626,20 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                       id="game-estimated-value"
                       type="number"
                       min={0}
-                      step={1}
+                      step={0.01}
                       placeholder={title ? `${estimateMarketValue(title, finalConsole, condition)} € (auto)` : 'ex: 35'}
                       value={estimatedValue}
-                      onChange={(e) => setEstimatedValue(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0))}
+                      onChange={(e) => {++priceRequestRef.current; setIsSearchingPrice(false); setMarketQuote(undefined); setEstimatedValue(e.target.value === '' ? '' : Math.max(0, Number(e.target.value) || 0));}}
                       className="w-full pl-3 pr-8 py-2 bg-[#0c1813] border border-emerald-500/50 rounded-xl text-sm font-mono font-bold text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
                     <span className="absolute right-3 top-2 text-xs font-bold text-emerald-400 font-mono">€</span>
                   </div>
                   <span className="text-[10px] text-emerald-200/80 mt-1 block">
-                    Argus Mister Game Price & Ventes eBay France (PAL FR)
+                    {isSearchingPrice ? 'Consultation du marché en cours…' : marketQuote ? (
+                      <a href={marketQuote.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                        {marketQuote.source} · consulté le {new Date(marketQuote.checkedAt).toLocaleDateString('fr-FR')} · marché PAL, édition FR non garantie
+                      </a>
+                    ) : 'Valeur indicative ou saisie manuellement · aucun prix de vente garanti'}
                   </span>
                 </div>
 
@@ -1690,7 +1721,7 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                     <button
                       type="button"
                       onClick={handleFetchCover}
-                      disabled={!title.trim() || isSearchingCover}
+                      disabled={!title.trim() || isSearchingCover || isSearchingPrice}
                       className="text-[10px] text-amber-400 hover:text-amber-300 font-pixel font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
                     >
                       {isSearchingCover ? (
@@ -1783,11 +1814,11 @@ Réponds EXCLUSIVEMENT avec un objet JSON strict :
                 <button
                   id="btn-submit-game"
                   type="submit"
-                  disabled={!title.trim() || isSearchingCover}
+                  disabled={!title.trim() || isSearchingCover || isSearchingPrice}
                   className="px-5 py-2.5 text-xs font-bold font-pixel text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
-                  {isSearchingCover ? 'RECHERCHE DE JAQUETTE…' : 'AJOUTER AU CATALOGUE'}
+                  {isSearchingCover ? 'RECHERCHE DE JAQUETTE…' : isSearchingPrice ? 'CONSULTATION DE LA COTE…' : 'AJOUTER AU CATALOGUE'}
                 </button>
               </div>
             </form>

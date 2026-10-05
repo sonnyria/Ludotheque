@@ -228,7 +228,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                 title="Afficher les informations sur les sources PriceCharting & Mister Game Price"
               >
                 <Info className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Source : PriceCharting</span>
+                <span>Estimations indicatives</span>
               </button>
             </div>
           </div>
@@ -541,7 +541,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                                 setEditingPriceGameId(null);
                               }}
                               className="px-1.5 py-0.5 text-[9px] bg-emerald-900/90 hover:bg-emerald-800 text-emerald-300 rounded font-pixel cursor-pointer border border-emerald-600/50"
-                              title="Réinitialiser à la cote auto PriceCharting"
+                              title="Réinitialiser à l’estimation locale indicative"
                             >
                               Auto
                             </button>
@@ -549,6 +549,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                         </div>
                       ) : (
                         <div className="flex flex-col items-end group/price">
+                          {game.marketQuote && <a className="text-[9px] text-slate-400 underline" href={game.marketQuote.sourceUrl} target="_blank" rel="noopener noreferrer">{game.marketQuote.source} · {new Date(game.marketQuote.checkedAt).toLocaleDateString('fr-FR')}</a>}
                           <div className="flex items-center justify-end gap-1">
                             <span
                               onClick={() => {
@@ -702,3 +703,4 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     </div>
   );
 };
+

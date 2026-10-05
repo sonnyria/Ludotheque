@@ -1,4 +1,4 @@
-import { GameCondition } from '../types';
+import type { GameCondition } from '../types.js';
 
 /**
  * Information sur la source des cotes argus (France & Europe)
@@ -11,7 +11,7 @@ export const COTE_SOURCE_INFO = {
   tertiary: 'Vinted & LeBonCoin',
   tertiaryUrl: 'https://www.leboncoin.fr',
   description:
-    "L'argus est calibré sur la réalité du marché français et européen (éditions PAL France avec boîtes et notices en français). Il s'appuie sur Mister Game Price (l'Argus de référence en France) et l'historique des ventes conclues et payées en Euros sur eBay France, Vinted et LeBonCoin.",
+    "Estimation locale indicative selon le titre, la console et la présence du jeu et de sa boîte. Les sites ci-dessous sont des liens de vérification manuelle, pas des données importées. Une consultation PriceCharting PAL, lorsqu’elle réussit, fournit une valeur distincte avec sa source et sa date; PAL ne garantit pas une édition française.",
 };
 
 /**
@@ -96,11 +96,11 @@ export function getPriceChartingSearchUrl(title: string, consoleName: string): s
 /**
  * Argus de référence des cotes du marché français & européen (en Euros €).
  * Base de référence pour un exemplaire "Complet en boîte" (CIB : Boîte originale française ou PAL, jaquette et notice).
- * Données vérifiées issues de Mister Game Price et des ventes réelles terminées sur eBay France / Vinted.
+ * Repères internes indicatifs, sans historique de ventes ni actualisation automatique.
  */
-const KNOWN_COTES_CIB: Record<string, number> = {
-  // === NINTENDO SWITCH (Marché FR d'occasion) ===
-  'the legend of zelda: breath of the wild': 42,
+const KNOWN_COTES_CIB: Record<string, Record<string, number>> = {
+  'Nintendo Switch': {
+'the legend of zelda: breath of the wild': 42,
   'the legend of zelda breath of the wild': 42,
   'the legend of zelda: tears of the kingdom': 45,
   'the legend of zelda tears of the kingdom': 45,
@@ -146,9 +146,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'bayonetta 3': 32,
   'fire emblem: three houses': 35,
   'fire emblem engage': 28,
-
-  // === PLAYSTATION 5 (Marché FR d'occasion) ===
-  'demon\'s souls': 28,
+  },
+  'PlayStation 5': {
+'demon\'s souls': 28,
   'demons souls': 28,
   'god of war ragnarok': 35,
   'god of war ragnarök': 35,
@@ -178,9 +178,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'silent hill 2 remake': 45,
   'death stranding director\'s cut': 22,
   'ghost of tsushima director\'s cut': 35,
-
-  // === PLAYSTATION 4 (Marché FR d'occasion) ===
-  'red dead redemption 2': 18,
+  },
+  'PlayStation 4': {
+'red dead redemption 2': 18,
   'the last of us part ii': 18,
   'the last of us part 2': 18,
   'the last of us remastered': 12,
@@ -215,9 +215,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'metal gear solid v ground zeroes': 8,
   'metal gear solid: master collection vol. 1': 32,
   'metal gear solid master collection vol 1': 32,
-
-  // === RETRO: SUPER NINTENDO / SNES (Boîte et notice FR d'origine - CIB) ===
-  'chrono trigger': 190,
+  },
+  'Super Nintendo (SNES)': {
+'chrono trigger': 190,
   'super mario world': 75,
   'the legend of zelda: a link to the past': 110,
   'the legend of zelda a link to the past': 110,
@@ -239,9 +239,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'f-zero': 45,
   'starwing': 40,
   'castlevania: vampire\'s kiss': 350,
-
-  // === RETRO: NINTENDO 64 / N64 (Boîte et notice FR - CIB) ===
-  'super mario 64': 80,
+  },
+  'Nintendo 64': {
+'super mario 64': 80,
   'the legend of zelda: ocarina of time': 95,
   'the legend of zelda ocarina of time': 95,
   'the legend of zelda: majora\'s mask': 125,
@@ -262,9 +262,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'pokemon stadium': 60,
   'pokemon snap': 50,
   'rayman 2: the great escape': 45,
-
-  // === RETRO: NINTENDO GAMECUBE (Boîte FR/PAL - CIB) ===
-  'super smash bros. melee': 65,
+  },
+  'Nintendo GameCube': {
+'super smash bros. melee': 65,
   'super smash bros melee': 65,
   'the legend of zelda: the wind waker': 65,
   'the legend of zelda the wind waker': 65,
@@ -291,9 +291,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'pikmin 2': 50,
   'star fox adventures': 30,
   'skies of arcadia legends': 110,
-
-  // === RETRO: GAME BOY / GBC / GBA (Boîte et notice FR - CIB) ===
-  'pokemon rouge': 120,
+  },
+  'Game Boy / Advance': {
+'pokemon rouge': 120,
   'pokemon bleu': 120,
   'pokemon jaune': 140,
   'pokemon or': 130,
@@ -317,9 +317,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'super mario advance': 40,
   'super mario advance 2': 40,
   'super mario advance 4': 50,
-
-  // === RETRO: NINTENDO DS / 3DS (Boîte FR/PAL - CIB) ===
-  'pokemon diamant': 40,
+  },
+  'Nintendo 3DS / DS': {
+'pokemon diamant': 40,
   'pokemon perle': 40,
   'pokemon platine': 95,
   'pokemon heartgold': 150,
@@ -348,9 +348,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'the legend of zelda: a link between worlds': 25,
   'mario kart ds': 15,
   'new super mario bros.': 15,
-
-  // === RETRO: PLAYSTATION 1 (Édition PAL France - Boîtier cristal - CIB) ===
-  'metal gear solid': 50,
+  },
+  'PlayStation 1': {
+'metal gear solid': 50,
   'silent hill': 140,
   'resident evil': 45,
   'resident evil 2': 50,
@@ -372,9 +372,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'medievil': 35,
   'dino crisis': 40,
   'dino crisis 2': 55,
-
-  // === RETRO: PLAYSTATION 2 (Édition PAL France - CIB) ===
-  'silent hill 2': 70,
+  },
+  'PlayStation 2': {
+'silent hill 2': 70,
   'silent hill 3': 60,
   'silent hill 4: the room': 55,
   'rule of rose': 450,
@@ -400,9 +400,9 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'gran turismo 4': 8,
   'tekken 5': 12,
   'okami': 25,
-
-  // === PLAYSTATION 3 (Édition PAL France - CIB) ===
-  'the last of us': 10,
+  },
+  'PlayStation 3': {
+'the last of us': 10,
   'red dead redemption': 10,
   'grand theft auto iv': 8,
   'gta iv': 8,
@@ -413,45 +413,40 @@ const KNOWN_COTES_CIB: Record<string, number> = {
   'god of war iii': 8,
   'uncharted 2: among thieves': 6,
   'uncharted 3: drake\'s deception': 6,
-
-  // === XBOX SERIES X|S, XBOX ONE, XBOX 360 & XBOX (CIB) ===
-  'forza horizon 5': 32,
+  },
+  'Xbox One': {
+'forza horizon 5': 32,
   'halo infinite': 20,
-  'starfield': 24,
   'forza horizon 4': 16,
   'halo: the master chief collection': 16,
   'halo master chief collection': 16,
   'gears 5': 14,
   'titanfall 2': 8,
+  'halo 5: guardians': 10,
+  'sunset overdrive': 10,
+  'quantum break': 12,
+  },
+  'Xbox 360': {
   'halo 3': 8,
   'halo 4': 8,
-  'halo 5: guardians': 10,
   'forza motorsport 4': 10,
   'gears of war': 6,
   'gears of war 2': 6,
   'gears of war 3': 6,
-  'sunset overdrive': 10,
-  'quantum break': 12,
+  },
+  'Xbox Original': {
   'star wars knights of the old republic': 25,
-};
-
-/**
- * Coefficients selon l'état du jeu par rapport à la cote CIB (Complet en boîte)
- * Ajusté à la réalité du marché des collectionneurs français :
- * - Pour les jeux en boîte carton (rétro), la boîte et la notice représentent 60% à 70% du prix !
- * - Le neuf sous blister rigide ou avec liseré officiel Nintendo/Sony bénéficie d'une forte prime.
- */
-export const CONDITION_COEFFICIENTS: Record<GameCondition, number> = {
-  neuf: 2.0,         // Neuf sous blister officiel (très recherché en France)
-  complet: 1.0,      // Boîte, jaquette, notice et jeu en bon état (base de référence CIB)
-  loose: 0.40,       // Cartouche ou disque seul sans boîte ni notice
-  boite_seule: 0.40, // Boîte seule + notice (très convoité pour reconstituer les jeux rétro)
-  dematerialise: 0,   // Dématérialisé (pas de valeur de revente sur le marché d'occasion)
+  },
+  'Xbox Series X|S': {
+'forza horizon 5': 32,
+  'halo infinite': 20,
+  'starfield': 24,
+  },
 };
 
 /**
  * Valeurs de base moyennes réalistes par console pour les jeux courants non répertoriés
- * Calibrées sur les transactions réelles en France (Mister Game Price / Vinted / Cash Converters)
+ * Repères internes génériques; aucune transaction récente importée
  */
 const CONSOLE_BASE_VALUES: Record<string, number> = {
   'Super Nintendo (SNES)': 45,
@@ -479,271 +474,41 @@ const CONSOLE_BASE_VALUES: Record<string, number> = {
   'Autre': 15,
 };
 
-/**
- * Détecte les jeux de sport de masse et jeux casuals courants qui ont une très faible cote (1€ - 3€)
- * en France (FIFA, PES, NBA 2K, Madden, SingStar, etc.).
- */
-function isLowValueSportsOrCasual(titleLower: string, consoleName: string): boolean {
-  const isSports =
-    titleLower.includes('fifa') ||
-    titleLower.includes('pes ') ||
-    titleLower.includes('pro evolution soccer') ||
-    titleLower.includes('ea sports fc') ||
-    titleLower.includes('nba 2k') ||
-    titleLower.includes('nba live') ||
-    titleLower.includes('madden') ||
-    titleLower.includes('wwe 2k') ||
-    titleLower.includes('smackdown') ||
-    titleLower.includes('nhl ') ||
-    titleLower.includes('tiger woods');
-
-  const isOldCasual =
-    titleLower.includes('singstar') ||
-    titleLower.includes('wii fit') ||
-    titleLower.includes('wii play') ||
-    titleLower.includes('buzz !') ||
-    titleLower.includes('buzz!') ||
-    (titleLower.includes('just dance') && !titleLower.includes('2024') && !titleLower.includes('2025'));
-
-  const modernOrDiscConsole =
-    consoleName.includes('PlayStation 2') ||
-    consoleName.includes('PlayStation 3') ||
-    consoleName.includes('PlayStation 4') ||
-    consoleName.includes('Xbox 360') ||
-    consoleName.includes('Xbox One') ||
-    consoleName.includes('Wii') ||
-    consoleName.includes('PC');
-
-  return (isSports || isOldCasual) && modernOrDiscConsole;
+function normalizePriceTitle(title: string): string {
+  return title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ').replace(/^the /, '');
 }
 
-/**
- * Calcule l'estimation réaliste de la cote d'occasion pour un jeu selon le marché français & européen
- */
+export function getConditionCoefficient(consoleName: string, condition: GameCondition): number {
+  const cardboard = ['NES', 'Super Nintendo (SNES)', 'Nintendo 64', 'Game Boy / Advance'].includes(consoleName);
+  if (condition === 'dematerialise') return 0;
+  if (condition === 'complet') return 1;
+  if (condition === 'loose') return cardboard ? 0.4 : 0.8;
+  if (condition === 'boite_seule') return cardboard ? 0.4 : 0.1;
+  // Sealed collectibles require an observed quote; these multipliers are only indicative.
+  return cardboard ? 2 : 1.3;
+}
+
 export function estimateMarketValue(
   title: string,
   consoleName: string,
   condition: GameCondition = 'complet'
 ): number {
-  if (condition === 'dematerialise') {
-    return 0;
-  }
-
-  const cleanTitle = title
-    .toLowerCase()
-    .trim()
-    .replace(/[’']/g, "'")
-    .replace(/[^a-z0-9\s:']/g, '');
-
-  const titleLower = title.toLowerCase();
-
-  // 1. Règle spéciale de réalité économique pour les jeux de sport annuels de masse (FIFA, PES, NBA...)
-  if (isLowValueSportsOrCasual(titleLower, consoleName)) {
-    // Les FIFA/PES d'anciennes générations valent entre 2€ et 3€ complets en France (1€ en loose)
-    const sportsBase = 3;
-    if (condition === 'loose') return 1;
-    if (condition === 'neuf') return 8;
-    return sportsBase;
-  }
-
-  // 2. Traitement spécifique haute précision pour les grandes sagas selon la plateforme
-  // A. Saga METAL GEAR
-  if (titleLower.includes('metal gear') || titleLower.includes('mgs')) {
-    if (
-      titleLower.includes(' 4') ||
-      titleLower.includes('iv') ||
-      titleLower.includes('guns of the patriots')
-    ) {
-      const baseMgs4 = 10;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseMgs4 * coeff), 2);
-    }
-    if (
-      titleLower.includes(' 5') ||
-      titleLower.includes(' v') ||
-      titleLower.includes('phantom pain')
-    ) {
-      const baseMgs5 = 10;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseMgs5 * coeff), 2);
-    }
-    if (titleLower.includes('ground zeroes')) {
-      const baseGz = 8;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseGz * coeff), 2);
-    }
-    if (titleLower.includes('master collection')) {
-      const baseMc = 32;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseMc * coeff), 2);
-    }
-    if (titleLower.includes('twin snakes')) {
-      const baseTs = 110;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseTs * coeff), 2);
-    }
-    if (
-      consoleName.includes('PlayStation 4') ||
-      consoleName.includes('PlayStation 3') ||
-      consoleName.includes('Xbox')
-    ) {
-      const baseMgsModern = consoleName.includes('PlayStation 4') ? 12 : 10;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseMgsModern * coeff), 2);
-    }
-  }
-
-  // B. Saga RESIDENT EVIL
-  if (titleLower.includes('resident evil') || titleLower.includes('biohazard')) {
-    if (consoleName.includes('PlayStation 3') || consoleName.includes('Xbox 360')) {
-      // RE5 et RE6 sur PS3/360 valent entre 6€ et 8€ complets
-      const baseRe = (titleLower.includes('revelations') || titleLower.includes('code veronica')) ? 10 : 7;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseRe * coeff), 2);
-    }
-    if (consoleName.includes('PlayStation 4') || consoleName.includes('Xbox One')) {
-      let baseRe4 = 14;
-      if (titleLower.includes('4 remake')) baseRe4 = 28;
-      else if (titleLower.includes('2 remake') || titleLower.includes('3 remake') || titleLower.includes('village')) baseRe4 = 18;
-      else if (titleLower.includes('7') || titleLower.includes('biohazard')) baseRe4 = 12;
-      else if (titleLower.includes('5') || titleLower.includes('6')) baseRe4 = 10;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseRe4 * coeff), 2);
-    }
-  }
-
-  // C. Saga GRAND THEFT AUTO (GTA)
-  if (titleLower.includes('grand theft auto') || titleLower.includes('gta')) {
-    if (consoleName.includes('PlayStation 3') || consoleName.includes('Xbox 360')) {
-      const baseGta = (titleLower.includes('iv') || titleLower.includes('4') || titleLower.includes('v') || titleLower.includes('5')) ? 8 : 10;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseGta * coeff), 2);
-    }
-    if (consoleName.includes('PlayStation 4') || consoleName.includes('Xbox One')) {
-      const baseGta4 = titleLower.includes('trilogy') ? 20 : 15;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseGta4 * coeff), 2);
-    }
-  }
-
-  // D. Blockbusters très répandus sur PS3 / PS4 / Xbox (Call of Duty, Battlefield, Assassin's Creed, Far Cry, Uncharted)
-  const isBlockbusterSeries =
-    titleLower.includes('call of duty') ||
-    titleLower.includes('battlefield') ||
-    titleLower.includes('assassin') ||
-    titleLower.includes('far cry') ||
-    titleLower.includes('uncharted') ||
-    titleLower.includes('tomb raider') ||
-    titleLower.includes('watch dogs') ||
-    titleLower.includes('batman arkham') ||
-    titleLower.includes('destiny') ||
-    titleLower.includes('division');
-
-  if (isBlockbusterSeries) {
-    if (consoleName.includes('PlayStation 3') || consoleName.includes('Xbox 360')) {
-      const baseBb = 6;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseBb * coeff), 2);
-    }
-    if (consoleName.includes('PlayStation 4') || consoleName.includes('Xbox One')) {
-      const baseBb4 = 10;
-      const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-      return Math.max(Math.round(baseBb4 * coeff), 2);
-    }
-  }
-
-  // 3. Recherche exacte dans le dictionnaire des cotes connues
-  let baseCib = KNOWN_COTES_CIB[cleanTitle];
-
-  // 4. Recherche intelligente par clé si non trouvé exactement
-  if (baseCib === undefined) {
-    // Normaliser les chiffres (ex: 1, 2, 3, 4) pour éviter qu'un jeu avec numéro ("mgs 4", "resident evil 2")
-    // n'aille matcher un opus différent sans numéro ("mgs 1", "resident evil")
-    const titleNumbers = cleanTitle.match(/\b\d+\b/g) || [];
-    const candidates: { key: string; val: number; score: number }[] = [];
-
-    for (const [key, val] of Object.entries(KNOWN_COTES_CIB)) {
-      const keyNumbers = key.match(/\b\d+\b/g) || [];
-
-      // Si l'un ou l'autre a des chiffres identifiables, ils doivent impérativement concorder
-      if (titleNumbers.length > 0 || keyNumbers.length > 0) {
-        if (titleNumbers.join(' ') !== keyNumbers.join(' ')) {
-          continue;
-        }
-      }
-
-      if (cleanTitle === key) {
-        candidates.push({ key, val, score: 1000 + key.length });
-      } else if (cleanTitle.startsWith(key + ' ') || cleanTitle.includes(' ' + key + ' ')) {
-        candidates.push({ key, val, score: 500 + key.length });
-      } else if (key.startsWith(cleanTitle + ' ') || key.includes(' ' + cleanTitle + ' ')) {
-        candidates.push({ key, val, score: 400 + cleanTitle.length });
-      } else if (cleanTitle.includes(key) && key.length >= 5) {
-        candidates.push({ key, val, score: 200 + key.length });
-      } else if (key.includes(cleanTitle) && cleanTitle.length >= 6) {
-        candidates.push({ key, val, score: 100 + cleanTitle.length });
-      }
-    }
-
-    if (candidates.length > 0) {
-      // Prioriser la clé la plus précise et spécifique
-      candidates.sort((a, b) => b.score - a.score);
-      baseCib = candidates[0].val;
-    }
-  }
-
-  // 5. Heuristique réaliste par console et prestige de licence (spécificités France / PAL)
-  if (baseCib === undefined) {
-    baseCib = CONSOLE_BASE_VALUES[consoleName] || 15;
-
-    // Licences cultes et recherchées en France
-    if (
-      titleLower.includes('zelda') ||
-      titleLower.includes('pokemon') ||
-      titleLower.includes('pokémon')
-    ) {
-      // Les Pokémon et Zelda en boîte FR ont une très forte cote en France
-      baseCib += (consoleName.includes('SNES') || consoleName.includes('N64') || consoleName.includes('Game Boy')) ? 50 : 25;
-    } else if (
-      titleLower.includes('mario') ||
-      titleLower.includes('metroid') ||
-      titleLower.includes('chrono') ||
-      titleLower.includes('fire emblem')
-    ) {
-      baseCib += (consoleName.includes('SNES') || consoleName.includes('N64') || consoleName.includes('GameCube')) ? 30 : 15;
-    } else if (
-      titleLower.includes('silent hill') ||
-      titleLower.includes('resident evil') ||
-      titleLower.includes('castlevania') ||
-      titleLower.includes('metal gear') ||
-      titleLower.includes('souls') ||
-      titleLower.includes('elden ring')
-    ) {
-      // Attention : Sur PS3/PS4/Xbox, Metal Gear Solid est un jeu très commun (8-12€), pas un jeu rétro rare !
-      if (
-        titleLower.includes('metal gear') &&
-        (consoleName.includes('PlayStation 3') || consoleName.includes('PlayStation 4') || consoleName.includes('Xbox'))
-      ) {
-        baseCib = 10;
-      } else {
-        baseCib += 20;
-      }
-    } else if (
-      titleLower.includes('collector') ||
-      titleLower.includes('steelbook') ||
-      titleLower.includes('edition limitee') ||
-      titleLower.includes('limited')
-    ) {
-      baseCib += 25;
-    }
-  }
-
-  // Application du coefficient d'état
-  const coeff = CONDITION_COEFFICIENTS[condition] ?? 1.0;
-  const rawValue = Math.round(baseCib * coeff);
-
-  // Valeur plancher : 2€ pour un jeu physique en état complet
-  return Math.max(rawValue, 2);
+  if (condition === 'dematerialise') return 0;
+  const normalized = normalizePriceTitle(title);
+  const aliases: Record<string, string> = {'witcher 3': 'witcher 3 wild hunt'};
+  const wanted = aliases[normalized] || normalized;
+  const references = KNOWN_COTES_CIB[consoleName] || {};
+  let base = Object.entries(references).find(([key]) => normalizePriceTitle(key) === wanted)?.[1];
+  // A small explicit cross-platform reference: do not copy an entire platform's catalogue.
+  if (base === undefined && consoleName === 'Xbox One' && wanted === 'witcher 3 wild hunt') base = 12;
+  const sports = /\b(?:fifa|pes|ea sports fc|nba 2k|madden|nhl)\b/.test(normalized);
+  const yearMatch = normalized.match(/\b(20\d{2}|\d{2})$/);
+  const year = yearMatch ? (Number(yearMatch[1]) < 100 ? 2000 + Number(yearMatch[1]) : Number(yearMatch[1])) : null;
+  if (sports && year !== null && year <= new Date().getFullYear() - 3) base = 3;
+  // Unknown titles use a platform average, never a guessed rare-franchise premium.
+  base ??= CONSOLE_BASE_VALUES[consoleName] || 15;
+  return Math.max(0, Math.round(base * getConditionCoefficient(consoleName, condition)));
 }
 
 /**
@@ -755,8 +520,9 @@ export function getGameEstimatedValue(game: {
   condition: GameCondition;
   estimatedValue?: number;
 }): number {
-  if (game.estimatedValue !== undefined && game.estimatedValue !== null && !isNaN(game.estimatedValue)) {
-    return game.estimatedValue;
+  if (game.condition === 'dematerialise') return 0;
+  if (Number.isFinite(game.estimatedValue) && game.estimatedValue! >= 0) {
+    return game.estimatedValue!;
   }
   return estimateMarketValue(game.title, game.console, game.condition);
 }
@@ -803,3 +569,4 @@ export function calculateValueMargin(
     isPositive: diff >= 0,
   };
 }
+

@@ -163,9 +163,7 @@ export default function App() {
   // Total estimated value of entire collection
   const totalEstimatedValue = useMemo(() => {
     return games.reduce((acc, game) => {
-      const val = game.estimatedValue !== undefined
-        ? game.estimatedValue
-        : estimateMarketValue(game.title, game.console, game.condition);
+      const val = getGameEstimatedValue(game);
       const qty = game.quantity || 1;
       return acc + val * qty;
     }, 0);
@@ -174,9 +172,7 @@ export default function App() {
   // Estimated value of current filtered view
   const filteredEstimatedValue = useMemo(() => {
     return filteredGames.reduce((acc, game) => {
-      const val = game.estimatedValue !== undefined
-        ? game.estimatedValue
-        : estimateMarketValue(game.title, game.console, game.condition);
+      const val = getGameEstimatedValue(game);
       const qty = game.quantity || 1;
       return acc + val * qty;
     }, 0);
@@ -241,10 +237,10 @@ export default function App() {
 
   const handleUpdateGamePrice = (gameId: string, newPrice: number) => {
     setGames((prev) =>
-      prev.map((g) => (g.id === gameId ? { ...g, estimatedValue: Math.max(0, Math.round(newPrice)) } : g))
+      prev.map((g) => (g.id === gameId ? { ...g, marketQuote: undefined, estimatedValue: Math.max(0, Math.round(newPrice)) } : g))
     );
     if (selectedGame && selectedGame.id === gameId) {
-      setSelectedGame((prev) => (prev ? { ...prev, estimatedValue: Math.max(0, Math.round(newPrice)) } : null));
+      setSelectedGame((prev) => (prev ? { ...prev, marketQuote: undefined, estimatedValue: Math.max(0, Math.round(newPrice)) } : null));
     }
   };
 
@@ -252,7 +248,7 @@ export default function App() {
     setGames((prev) =>
       prev.map((g) => {
         if (g.id === gameId) {
-          const { estimatedValue, ...rest } = g;
+          const { estimatedValue, marketQuote, ...rest } = g;
           return rest as Game;
         }
         return g;
@@ -264,6 +260,7 @@ export default function App() {
     setGames((prev) =>
       prev.map((g) => ({
         ...g,
+        marketQuote: undefined,
         estimatedValue: estimateMarketValue(g.title, g.console, g.condition),
       }))
     );
@@ -273,8 +270,8 @@ export default function App() {
     setGames((prev) =>
       prev.map((g) => {
         const cur = getGameEstimatedValue(g);
-        const newVal = Math.max(1, Math.round(cur * (1 + percent / 100)));
-        return { ...g, estimatedValue: newVal };
+        const newVal = Math.max(0, Math.round(cur * (1 + percent / 100)));
+        return { ...g, marketQuote: undefined, estimatedValue: newVal };
       })
     );
   };
@@ -282,7 +279,7 @@ export default function App() {
   const handleResetCustomPrices = () => {
     setGames((prev) =>
       prev.map((g) => {
-        const { estimatedValue, ...rest } = g;
+        const { estimatedValue, marketQuote, ...rest } = g;
         return rest as Game;
       })
     );
@@ -534,7 +531,7 @@ export default function App() {
                       title="Afficher les détails de la source PriceCharting"
                     >
                       <Info className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Source : PriceCharting</span>
+                      <span>Estimations indicatives</span>
                     </button>
                   </div>
                 </div>
@@ -808,3 +805,4 @@ export default function App() {
     </div>
   );
 }
+

@@ -1,4 +1,6 @@
 import express from 'express';
+import {lookupMarketQuote} from './server/marketQuote.js';
+import {estimateMarketValue} from './src/utils/marketPriceGuide.js';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
@@ -382,64 +384,8 @@ function guessGameGenre(title: string): string {
 }
 
 // Estimate market value based on title, platform and live web texts
-function guessEstimatedValue(title: string = '', consoleName: string = '', rawTexts: string[] = []): number {
-  const t = title.toLowerCase();
-
-  // 1. Live market price from web snippets if available (e.g. "12,99 €", "14.50 EUR")
-  for (const text of rawTexts) {
-    const pm = text.match(/(?:prix|cote|price|vendu|eur|€)?\s*[:\s]*(\d{1,3})(?:[.,]\d{2})?\s*(?:€|eur)\b/i);
-    if (pm) {
-      const val = parseInt(pm[1], 10);
-      if (val >= 3 && val <= 180) {
-        return val;
-      }
-    }
-  }
-
-  // 2. High-volume sports games have low second-hand value
-  if (/fifa|pes|efootball|nba\s*2k|nhl|madden|wwe|pro\s*evolution/i.test(t)) {
-    return 3;
-  }
-
-  // 3. Known franchise Argus pricing (Mister Game Price / eBay France reference)
-  if (/witcher\s*3/i.test(t)) {
-    return consoleName.includes('Switch') ? 22 : 12;
-  }
-  if (/red\s*dead\s*redemption\s*2/i.test(t)) {
-    return 15;
-  }
-  if (/grand\s*theft\s*auto\s*v|gta\s*5|gta\s*v/i.test(t)) {
-    return 12;
-  }
-  if (/pok[eé]mon/i.test(t)) {
-    if (/game\s*boy|advance|gba/i.test(consoleName)) return 60;
-    if (/3ds|ds/i.test(consoleName)) return 45;
-    return 35;
-  }
-  if (/zelda/i.test(t)) {
-    if (/nintendo\s*64|gamecube|snes/i.test(consoleName)) return 55;
-    if (/wii|wii\s*u|3ds/i.test(consoleName)) return 30;
-    return 38;
-  }
-  if (/mario\s*kart/i.test(t)) {
-    return consoleName.includes('Switch') ? 38 : 28;
-  }
-  if (/elden\s*ring/i.test(t)) return 30;
-  if (/cyberpunk/i.test(t)) return 18;
-  if (/god\s*of\s*war\s*ragnar/i.test(t)) return 35;
-  if (/spider-man\s*2/i.test(t)) return 40;
-
-  // 4. Default by platform
-  if (consoleName === 'PlayStation 3' || consoleName === 'Xbox 360') return 8;
-  if (consoleName === 'PlayStation 4' || consoleName === 'Xbox One') return 12;
-  if (consoleName === 'PlayStation 5' || consoleName === 'Nintendo Switch' || consoleName === 'Xbox Series X|S') return 25;
-  if (consoleName === 'PlayStation 2') return 10;
-  if (consoleName === 'PlayStation 1') return 15;
-  if (consoleName === 'Nintendo GameCube' || consoleName === 'Nintendo 64') return 30;
-  if (consoleName === 'Super Nintendo (SNES)') return 25;
-  if (consoleName === 'Game Boy / Advance') return 20;
-  if (consoleName === 'Nintendo 3DS / DS') return 15;
-  return 10;
+function guessEstimatedValue(title: string = '', consoleName: string = ''): number {
+  return estimateMarketValue(title, consoleName, 'complet');
 }
 
 // Online barcode lookup via multi-engine live web queries (Bing, DuckDuckGo, OpenProductsFacts)
@@ -2017,55 +1963,18 @@ Réponds EXCLUSIVEMENT avec un tableau JSON strict [ { ... }, ... ] où chaque o
   }
 });
 
-// API: Estimer la cote d'un jeu selon l'argus français (Mister Game Price & ventes réelles eBay France)
+// API: condition-specific observed quote, with an explicitly indicative offline fallback.
 app.post('/api/games/estimate-price', async (req, res) => {
-  const { title, console: consoleName, condition } = req.body;
-  if (!title) {
-    return res.status(400).json({ error: 'Titre manquant' });
+  const {title, console: consoleName, condition = 'complet'} = req.body || {};
+  if (typeof title !== 'string' || !title.trim() || title.length > 200 || typeof consoleName !== 'string' ||
+      !['neuf','complet','loose','boite_seule','dematerialise'].includes(condition)) {
+    return res.status(400).json({error: 'Titre, console ou état invalide'});
   }
-
-  const customApiKey = ((req.headers['x-gemini-api-key'] as string) || req.body?.apiKey || '').trim();
-  if (isGeminiAvailable(customApiKey)) {
-    const ai = getAi(customApiKey);
-    if (ai) {
-      try {
-        const prompt = `Tu es un expert du marché français et européen des jeux vidéo d'occasion (spécialiste de l'Argus Mister Game Price, des ventes réussies eBay France en Euros, et des transactions Vinted/LeBonCoin).
-Estime la cote d'occasion actuelle en Euros (€) pour le jeu suivant :
-- Titre : "${title}"
-- Console : "${consoleName || 'Non précisé'}"
-- État de conservation : "${condition || 'complet'}" (options : neuf sous blister, complet avec boîte et notice en français, loose sans boîte, boîte seule)
-
-Règles impératives du marché français :
-1. Les jeux de sport annuels de masse (FIFA, PES, NBA 2K) sur PS2/PS3/PS4/Xbox valent seulement 2€ à 3€ en complet, 1€ en loose.
-2. Les jeux très courants sur PS3 / PS4 / Xbox (Metal Gear Solid 4, Metal Gear Solid V, Uncharted, The Last of Us, Grand Theft Auto IV/V, Assassin's Creed) se trouvent partout en abondance en France et valent entre 8€ et 12€ en boîte complet (CIB). Ne JAMAIS attribuer la cote de Metal Gear Solid 1 sur PS1 (50€) à Metal Gear Solid 4 (10€).
-3. Les classiques Nintendo en boîte et notice en français (Zelda, Pokémon, Mario, Metroid, SNES, N64, Game Boy, GameCube) ont une cote élevée conforme aux ventes réelles en France.
-4. Donne la valeur entière en Euros (€).
-
-Réponds EXCLUSIVEMENT avec un JSON strict :
-{
-  "estimatedValue": 10,
-  "source": "Mister Game Price & Ventes eBay France",
-  "explanation": "court résumé expliquant l'estimation selon le marché français"
-}`;
-
-        const parsed = await generateGeminiJson(ai, prompt, 6000);
-        if (parsed && typeof parsed.estimatedValue === 'number' && parsed.estimatedValue >= 0) {
-          return res.json({
-            estimatedValue: parsed.estimatedValue,
-            source: parsed.source || 'Mister Game Price & Ventes eBay France',
-            explanation: parsed.explanation || ''
-          });
-        }
-      } catch (err: any) {
-        markGeminiFailure(err, Boolean(customApiKey));
-      }
-    }
-  }
-
-  return res.json({
-    estimatedValue: null,
-    source: 'Mister Game Price'
-  });
+  const quote = await lookupMarketQuote(title, consoleName, condition);
+  res.setHeader('Cache-Control', 'no-store');
+  if (quote) return res.json({...quote, kind: 'observed'});
+  return res.json({estimatedValue: estimateMarketValue(title, consoleName, condition), currency: 'EUR',
+    kind: 'indicative', source: 'Estimation locale indicative', explanation: 'Aucune cote de marché vérifiée disponible pour ce titre, cette console et cet état.'});
 });
 
 // API: Validate custom or system Gemini API key
